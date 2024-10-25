@@ -17,7 +17,7 @@ export async function plugin(inputs: PluginInputs, env: Env) {
     apiKey: env.VOYAGEAI_API_KEY,
   });
   const openAiObject = {
-    apiKey: env.OPENAI_API_KEY,
+    apiKey: (inputs.settings.openAiBaseUrl && env.OPENROUTER_API_KEY) || env.OPENAI_API_KEY,
     ...(inputs.settings.openAiBaseUrl && { baseURL: inputs.settings.openAiBaseUrl }),
   };
   const openaiClient = new OpenAI(openAiObject);

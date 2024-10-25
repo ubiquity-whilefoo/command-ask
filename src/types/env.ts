@@ -17,6 +17,7 @@ export const envSchema = T.Object({
   VOYAGEAI_API_KEY: T.String(),
   SUPABASE_URL: T.String(),
   SUPABASE_KEY: T.String(),
+  OPENROUTER_API_KEY: T.String(),
 });
 
 export const envValidator = new StandardValidator(envSchema);

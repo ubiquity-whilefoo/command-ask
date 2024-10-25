@@ -27,11 +27,15 @@ plugins:
 
 `.dev.vars` (for local testing):
 
-```sh
-# OpenAI API key
-OPENAI_API_KEY=your-api-key
-UBIQUITY_OS_APP_NAME="UbiquityOS"
+To use the Openrouter API for fetching chat history, set the `OPENROUTER_API_KEY` in the `.dev.vars` file and specify the OpenAiBase URL in the `ubiquibot-config.yml` file. Alternatively, you can set the `OPENAI_API_KEY` in the `.dev.vars` file.
 
+```sh
+OPENAI_API_KEY=your_openai_api_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
+VOYAGEAI_API_KEY=your_voyageai_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+UBIQUITY_OS_APP_NAME="UbiquityOS"
 ```
 
 ## Testing

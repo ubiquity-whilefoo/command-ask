@@ -1,16 +1,4 @@
-import { ModelApplications } from "../../types/llm";
-
-export type GroundTruthsSystemMessage<TApp extends ModelApplications = ModelApplications> = TApp extends "code-review"
-  ? typeof CODE_REVIEW_GROUND_TRUTHS_SYSTEM_MESSAGE
-  : TApp extends "chat-bot"
-    ? typeof CHAT_BOT_GROUND_TRUTHS_SYSTEM_MESSAGE
-    : never;
-
-export type GroundTruthsSystemMessageTemplate = {
-  truthRules: string[];
-  example: string[];
-  conditions?: string[];
-};
+import { GroundTruthsSystemMessageTemplate, ModelApplications } from "../../types/llm";
 
 const CODE_REVIEW_GROUND_TRUTHS_SYSTEM_MESSAGE = {
   example: [

@@ -5,6 +5,8 @@ import { IssueSimilaritySearchResult } from "../adapters/supabase/helpers/issues
 import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { optimizeContext } from "../helpers/issue";
+import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
+import { findGroundTruths } from "./ground-truths/find-ground-truths";
 
 /**
  * Asks a question to GPT and returns the response
@@ -62,12 +64,17 @@ export async function askGpt(context: Context, question: string, formattedChat: 
   // const reRankedChat = formattedChat.length > 0 ? await context.adapters.voyage.reranker.reRankResults(formattedChat.filter(text => text !== ""), question, 300) : [];
   similarText = similarText.filter((text) => text !== "");
   const rerankedText = similarText.length > 0 ? await context.adapters.voyage.reranker.reRankResults(similarText, question) : [];
-  return context.adapters.openai.completions.createCompletion(
-    question,
-    model,
-    rerankedText,
-    formattedChat,
-    ["typescript", "github", "cloudflare worker", "actions", "jest", "supabase", "openai"],
-    UBIQUITY_OS_APP_NAME
-  );
+
+  const languages = await fetchRepoLanguageStats(context);
+  const { dependencies, devDependencies } = await fetchRepoDependencies(context);
+  const groundTruths = await findGroundTruths(context, "chat-bot", {
+    languages,
+    dependencies,
+    devDependencies,
+  });
+
+  console.log("languages: ", languages);
+  console.log("Ground Truths: ", groundTruths);
+
+  return context.adapters.openai.completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);
 }

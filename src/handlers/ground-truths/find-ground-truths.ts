@@ -32,7 +32,6 @@ async function findChatBotTruths(context: Context, params: AppParamsHelper<"chat
 }
 
 async function findCodeReviewTruths(context: Context, params: AppParamsHelper<"code-review">, systemMsg: string): Promise<string[]> {
-  const { taskSpecification } = params;
-  const truths = await createGroundTruthCompletion<"code-review">(context, taskSpecification, systemMsg, "gpt-4o");
+  const truths = await createGroundTruthCompletion<"code-review">(context, params.taskSpecification, systemMsg, "gpt-4o");
   return validateGroundTruths(truths);
 }

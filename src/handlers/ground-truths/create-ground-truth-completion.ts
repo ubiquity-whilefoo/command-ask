@@ -18,17 +18,19 @@ export async function createGroundTruthCompletion<TApp extends ModelApplications
     ...(openAiBaseUrl && { baseURL: openAiBaseUrl }),
   });
 
+  const msgs = [
+    {
+      role: "system",
+      content: systemMsg,
+    },
+    {
+      role: "user",
+      content: groundTruthSource,
+    },
+  ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+
   const res = await openAi.chat.completions.create({
-    messages: [
-      {
-        role: "system",
-        content: systemMsg,
-      },
-      {
-        role: "user",
-        content: groundTruthSource,
-      },
-    ],
+    messages: msgs,
     model: model,
   });
 

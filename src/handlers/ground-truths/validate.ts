@@ -5,6 +5,7 @@ export function validateGroundTruths(truthsString: string | null): string[] {
   if (!truthsString) {
     throw logger.error("Failed to generate ground truths");
   }
+
   try {
     truths = JSON.parse(truthsString);
   } catch (err) {

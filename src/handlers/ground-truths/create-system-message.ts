@@ -9,7 +9,7 @@ Each ground truth should:
 Example:
 ${example.join("\n")}
   
-${conditions ? `Conditions:\n${conditions}` : ""}
+${conditions ? `Conditions:\n${conditions.join("\n")}` : ""}
   
 Generate similar ground truths adhering to a maximum of 10.
   

@@ -46,7 +46,8 @@ const CHAT_BOT_GROUND_TRUTHS_SYSTEM_MESSAGE = {
     "Assume your output builds the foundation for a chatbot to understand the repository when asked an arbitrary query.",
     "Do not list every language or dependency, focus on the most prevalent ones.",
     "Focus on what is essential to understand the repository at a high level.",
-    "Brevity is key.",
+    "Brevity is key. Use zero formatting. Do not wrap in quotes, backticks, or other characters.",
+    `response === ["some", "array", "of", "strings"]`,
   ],
 };
 

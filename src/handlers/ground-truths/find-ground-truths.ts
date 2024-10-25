@@ -16,9 +16,11 @@ export async function findGroundTruths<TApp extends ModelApplications = ModelApp
   const systemMsg = createGroundTruthSysMsg(systemMsgObj);
 
   if (chatBotPayloadTypeguard(params)) {
-    return findChatBotTruths(context, params, systemMsg);
+    const { dependencies, devDependencies, languages } = params;
+    return findChatBotTruths(context, { dependencies, devDependencies, languages }, systemMsg);
   } else if (codeReviewPayloadTypeguard(params)) {
-    return findCodeReviewTruths(context, params, systemMsg);
+    const { taskSpecification } = params;
+    return findCodeReviewTruths(context, { taskSpecification }, systemMsg);
   } else {
     throw logger.error("Invalid payload type for ground truths");
   }

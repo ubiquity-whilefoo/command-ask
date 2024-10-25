@@ -73,8 +73,5 @@ export async function askGpt(context: Context, question: string, formattedChat: 
     devDependencies,
   });
 
-  console.log("languages: ", languages);
-  console.log("Ground Truths: ", groundTruths);
-
   return context.adapters.openai.completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);
 }

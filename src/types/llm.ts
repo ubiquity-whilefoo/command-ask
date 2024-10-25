@@ -15,16 +15,16 @@ type CodeReviewAppParams = {
 export type AppParamsHelper<TApp extends ModelApplications> = TApp extends "code-review"
   ? CodeReviewAppParams
   : TApp extends "chat-bot"
-  ? ChatBotAppParams
-  : never;
+    ? ChatBotAppParams
+    : never;
 
 export type CompletionsModelHelper<TApp extends ModelApplications> = TApp extends "code-review" ? "gpt-4o" : TApp extends "chat-bot" ? "o1-mini" : never;
 
 export type GroundTruthsSystemMessage<TApp extends ModelApplications = ModelApplications> = TApp extends "code-review"
-  ? typeof GROUND_TRUTHS_SYSTEM_MESSAGES["code-review"]
+  ? (typeof GROUND_TRUTHS_SYSTEM_MESSAGES)["code-review"]
   : TApp extends "chat-bot"
-  ? typeof GROUND_TRUTHS_SYSTEM_MESSAGES["chat-bot"]
-  : never;
+    ? (typeof GROUND_TRUTHS_SYSTEM_MESSAGES)["chat-bot"]
+    : never;
 
 export type GroundTruthsSystemMessageTemplate = {
   truthRules: string[];

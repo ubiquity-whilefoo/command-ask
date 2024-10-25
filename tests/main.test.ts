@@ -2,7 +2,7 @@ import { db } from "./__mocks__/db";
 import { server } from "./__mocks__/node";
 import usersGet from "./__mocks__/users-get.json";
 import { expect, describe, beforeAll, beforeEach, afterAll, afterEach, it } from "@jest/globals";
-import { Logs } from "@ubiquity-dao/ubiquibot-logger";
+import { Logs } from "@ubiquity-os/ubiquity-os-logger";
 import { Context, SupportedEventsU } from "../src/types";
 import { drop } from "@mswjs/data";
 import issueTemplate from "./__mocks__/issue-template";
@@ -93,7 +93,7 @@ describe("Ask plugin tests", () => {
     createComments([transformCommentTemplate(1, 1, TEST_QUESTION, "ubiquity", "test-repo", true)]);
     await runPlugin(ctx);
 
-    expect(infoSpy).toHaveBeenCalledWith("Comment is empty. Skipping.");
+    expect(infoSpy).toHaveBeenCalledWith("No question provided. Skipping.");
   });
   it("Should throw if OPENAI_API_KEY is not defined", () => {
     const settings = {};
@@ -168,7 +168,7 @@ describe("Ask plugin tests", () => {
     `;
 
     const normalizedExpected = normalizeString(prompt);
-    const normalizedReceived = normalizeString(infoSpy.mock.calls[1][0]);
+    const normalizedReceived = normalizeString(infoSpy.mock.calls[1][0] as string);
 
     expect(normalizedReceived).toEqual(normalizedExpected);
   });
@@ -187,7 +187,7 @@ function transformCommentTemplate(commentId: number, issueNumber: number, body: 
       login: "ubiquity",
       type: "User",
     },
-    body: TEST_QUESTION,
+    body: body,
     url: "https://api.github.com/repos/ubiquity/test-repo/issues/comments/1",
     html_url: "https://www.github.com/ubiquity/test-repo/issues/1",
     owner: "ubiquity",

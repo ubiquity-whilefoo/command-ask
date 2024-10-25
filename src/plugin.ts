@@ -1,7 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import { PluginInputs } from "./types";
 import { Context } from "./types";
-import { LogLevel, Logs } from "@ubiquity-dao/ubiquibot-logger";
+import { LogLevel, Logs } from "@ubiquity-os/ubiquity-os-logger";
 import { Env } from "./types/env";
 import { createAdapters } from "./adapters";
 import { createClient } from "@supabase/supabase-js";

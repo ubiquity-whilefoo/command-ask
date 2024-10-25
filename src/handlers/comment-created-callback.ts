@@ -12,19 +12,20 @@ export async function issueCommentCreatedCallback(
     env: { UBIQUITY_OS_APP_NAME },
   } = context;
   const question = context.payload.comment.body.trim();
-  if (!question || question.length === 0) {
-    return { status: 204, reason: logger.info("Comment is empty. Skipping.").logMessage.raw };
-  }
-  const slugRegex = new RegExp(`@${UBIQUITY_OS_APP_NAME} `, "gi");
-  if (!question.match(slugRegex)) {
+  const slugRegex = new RegExp(`@${UBIQUITY_OS_APP_NAME}`, "gi");
+
+  if (!slugRegex.test(question)) {
     return { status: 204, reason: logger.info("Comment does not mention the app. Skipping.").logMessage.raw };
   }
+
+  if (!question.length || question.replace(slugRegex, "").trim().length === 0) {
+    return { status: 204, reason: logger.info("No question provided. Skipping.").logMessage.raw };
+  }
+
   if (context.payload.comment.user?.type === "Bot") {
     return { status: 204, reason: logger.info("Comment is from a bot. Skipping.").logMessage.raw };
   }
-  if (question.replace(slugRegex, "").trim().length === 0) {
-    return { status: 204, reason: logger.info("Comment is empty. Skipping.").logMessage.raw };
-  }
+
   logger.info(`Asking question: ${question}`);
 
   try {

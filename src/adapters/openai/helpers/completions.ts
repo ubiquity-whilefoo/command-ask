@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { Context } from "../../../types";
 import { SuperOpenAi } from "./openai";
+import { CompletionsModelHelper, ModelApplications } from "../../../types/llm";
 const MAX_TOKENS = 7000;
 
 export interface CompletionsType {
@@ -75,5 +76,40 @@ export class Completions extends SuperOpenAi {
       return { answer: answer.content, tokenUsage: { input: res.usage.prompt_tokens, output: res.usage.completion_tokens, total: res.usage.total_tokens } };
     }
     return { answer: "", tokenUsage: { input: 0, output: 0, total: 0 } };
+  }
+
+  async createGroundTruthCompletion<TApp extends ModelApplications>(
+    context: Context,
+    groundTruthSource: string,
+    systemMsg: string,
+    model: CompletionsModelHelper<TApp>
+  ): Promise<string | null> {
+    const {
+      env: { OPENAI_API_KEY },
+      config: { openAiBaseUrl },
+    } = context;
+
+    const openAi = new OpenAI({
+      apiKey: OPENAI_API_KEY,
+      ...(openAiBaseUrl && { baseURL: openAiBaseUrl }),
+    });
+
+    const msgs = [
+      {
+        role: "system",
+        content: systemMsg,
+      },
+      {
+        role: "user",
+        content: groundTruthSource,
+      },
+    ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+
+    const res = await openAi.chat.completions.create({
+      messages: msgs,
+      model: model,
+    });
+
+    return res.choices[0].message.content;
   }
 }

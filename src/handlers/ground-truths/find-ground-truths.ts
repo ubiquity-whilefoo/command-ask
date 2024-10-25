@@ -4,7 +4,6 @@ import { GROUND_TRUTHS_SYSTEM_MESSAGES } from "./prompts";
 import { chatBotPayloadTypeguard, codeReviewPayloadTypeguard } from "../../types/typeguards";
 import { validateGroundTruths } from "./validate";
 import { logger } from "../../helpers/errors";
-import { createGroundTruthCompletion } from "./create-ground-truth-completion";
 import { createGroundTruthSysMsg } from "./create-system-message";
 
 export async function findGroundTruths<TApp extends ModelApplications = ModelApplications>(
@@ -32,8 +31,9 @@ async function findChatBotTruths(
   params: AppParamsHelper<"chat-bot">,
   systemMsgObj: GroundTruthsSystemMessage<"chat-bot">
 ): Promise<string[]> {
+  const { adapters: { openai: { completions } } } = context;
   const systemMsg = createGroundTruthSysMsg(systemMsgObj);
-  const truths = await createGroundTruthCompletion<"chat-bot">(context, JSON.stringify(params), systemMsg, "o1-mini");
+  const truths = await completions.createGroundTruthCompletion<"chat-bot">(context, JSON.stringify(params), systemMsg, "o1-mini");
   return validateGroundTruths(truths);
 }
 
@@ -42,7 +42,8 @@ async function findCodeReviewTruths(
   params: AppParamsHelper<"code-review">,
   systemMsgObj: GroundTruthsSystemMessage<"code-review">
 ): Promise<string[]> {
+  const { adapters: { openai: { completions } } } = context;
   const systemMsg = createGroundTruthSysMsg(systemMsgObj);
-  const truths = await createGroundTruthCompletion<"code-review">(context, params.taskSpecification, systemMsg, "gpt-4o");
+  const truths = await completions.createGroundTruthCompletion<"code-review">(context, params.taskSpecification, systemMsg, "gpt-4o");
   return validateGroundTruths(truths);
 }

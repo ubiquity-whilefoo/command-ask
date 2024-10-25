@@ -16,4 +16,3 @@ cypress/screenshots
 script.ts
 .wrangler
 test-dashboard.md
-t.ts

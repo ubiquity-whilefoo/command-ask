@@ -11,7 +11,10 @@ export async function issueCommentCreatedCallback(
     logger,
     env: { UBIQUITY_OS_APP_NAME },
   } = context;
-  const question = context.payload.comment.body;
+  const question = context.payload.comment.body.trim();
+  if (!question || question.length === 0) {
+    return { status: 204, reason: logger.info("Comment is empty. Skipping.").logMessage.raw };
+  }
   const slugRegex = new RegExp(`@${UBIQUITY_OS_APP_NAME} `, "gi");
   if (!question.match(slugRegex)) {
     return { status: 204, reason: logger.info("Comment does not mention the app. Skipping.").logMessage.raw };

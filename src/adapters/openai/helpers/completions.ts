@@ -6,6 +6,7 @@ const MAX_TOKENS = 7000;
 
 export interface CompletionsType {
   answer: string;
+  groundTruths: string[];
   tokenUsage: {
     input: number;
     output: number;
@@ -73,9 +74,13 @@ export class Completions extends SuperOpenAi {
     });
     const answer = res.choices[0].message;
     if (answer && answer.content && res.usage) {
-      return { answer: answer.content, tokenUsage: { input: res.usage.prompt_tokens, output: res.usage.completion_tokens, total: res.usage.total_tokens } };
+      return {
+        answer: answer.content,
+        groundTruths,
+        tokenUsage: { input: res.usage.prompt_tokens, output: res.usage.completion_tokens, total: res.usage.total_tokens },
+      };
     }
-    return { answer: "", tokenUsage: { input: 0, output: 0, total: 0 } };
+    return { answer: "", tokenUsage: { input: 0, output: 0, total: 0 }, groundTruths };
   }
 
   async createGroundTruthCompletion<TApp extends ModelApplications>(

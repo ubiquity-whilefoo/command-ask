@@ -403,6 +403,9 @@ function createContext(body = TEST_SLASH_COMMAND) {
               },
             };
           },
+          createGroundTruthCompletion: async (): Promise<string> => {
+            return '["This is a mock answer for the chat"]';
+          },
         },
       },
     },

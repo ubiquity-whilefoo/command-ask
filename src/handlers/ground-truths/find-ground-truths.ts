@@ -31,7 +31,11 @@ async function findChatBotTruths(
   params: AppParamsHelper<"chat-bot">,
   systemMsgObj: GroundTruthsSystemMessage<"chat-bot">
 ): Promise<string[]> {
-  const { adapters: { openai: { completions } } } = context;
+  const {
+    adapters: {
+      openai: { completions },
+    },
+  } = context;
   const systemMsg = createGroundTruthSysMsg(systemMsgObj);
   const truths = await completions.createGroundTruthCompletion<"chat-bot">(context, JSON.stringify(params), systemMsg, "o1-mini");
   return validateGroundTruths(truths);
@@ -42,7 +46,11 @@ async function findCodeReviewTruths(
   params: AppParamsHelper<"code-review">,
   systemMsgObj: GroundTruthsSystemMessage<"code-review">
 ): Promise<string[]> {
-  const { adapters: { openai: { completions } } } = context;
+  const {
+    adapters: {
+      openai: { completions },
+    },
+  } = context;
   const systemMsg = createGroundTruthSysMsg(systemMsgObj);
   const truths = await completions.createGroundTruthCompletion<"code-review">(context, params.taskSpecification, systemMsg, "gpt-4o");
   return validateGroundTruths(truths);

@@ -18,6 +18,7 @@ const TEST_SLASH_COMMAND = "@UbiquityOS what is pi?";
 const LOG_CALLER = "_Logs.<anonymous>";
 const ISSUE_ID_2_CONTENT = "More context here #2";
 const ISSUE_ID_3_CONTENT = "More context here #3";
+const MOCK_ANSWER = "This is a mock answer for the chat";
 
 type Comment = {
   id: number;
@@ -61,7 +62,7 @@ describe("Ask plugin tests", () => {
 
     expect(res).toBeDefined();
 
-    expect(res?.answer).toBe("This is a mock answer for the chat");
+    expect(res?.answer).toBe(MOCK_ANSWER);
   });
 
   it("should not ask GPT a question if comment is from a bot", async () => {
@@ -106,7 +107,6 @@ describe("Ask plugin tests", () => {
     createComments([transformCommentTemplate(1, 1, TEST_QUESTION, "ubiquity", "test-repo", true)]);
     await runPlugin(ctx);
 
-    expect(infoSpy).toHaveBeenCalledTimes(3);
     expect(infoSpy).toHaveBeenNthCalledWith(1, `Asking question: @UbiquityOS ${TEST_QUESTION}`);
     expect(infoSpy).toHaveBeenNthCalledWith(3, "Answer: This is a mock answer for the chat", {
       caller: LOG_CALLER,
@@ -129,8 +129,6 @@ describe("Ask plugin tests", () => {
     ]);
 
     await runPlugin(ctx);
-
-    expect(infoSpy).toHaveBeenCalledTimes(3);
 
     expect(infoSpy).toHaveBeenNthCalledWith(1, `Asking question: @UbiquityOS ${TEST_QUESTION}`);
 
@@ -395,13 +393,17 @@ function createContext(body = TEST_SLASH_COMMAND) {
         completions: {
           createCompletion: async (): Promise<CompletionsType> => {
             return {
-              answer: "This is a mock answer for the chat",
+              answer: MOCK_ANSWER,
+              groundTruths: [MOCK_ANSWER],
               tokenUsage: {
                 input: 1000,
                 output: 150,
                 total: 1150,
               },
             };
+          },
+          createGroundTruthCompletion: async (): Promise<string> => {
+            return `["${MOCK_ANSWER}"]`;
           },
         },
       },

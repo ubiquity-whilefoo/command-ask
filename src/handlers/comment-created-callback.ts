@@ -12,7 +12,7 @@ export async function issueCommentCreatedCallback(
     env: { UBIQUITY_OS_APP_NAME },
   } = context;
   const question = context.payload.comment.body.trim();
-  const slugRegex = new RegExp(`@${UBIQUITY_OS_APP_NAME}`, "gi");
+  const slugRegex = new RegExp(`^@${UBIQUITY_OS_APP_NAME}`, "i");
 
   if (!slugRegex.test(question)) {
     return { status: 204, reason: logger.info("Comment does not mention the app. Skipping.").logMessage.raw };

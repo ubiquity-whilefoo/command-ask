@@ -1,3 +1,4 @@
+import { GithubDiff } from "github-diff-tool";
 import { createKey, getAllStreamlinedComments } from "../handlers/comments";
 import { Context } from "../types";
 import { IssueWithUser, SimplifiedComment, User } from "../types/github-types";
@@ -167,15 +168,18 @@ export async function mergeCommentsAndFetchSpec(
 export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number): Promise<string | null> {
   const { octokit, logger } = context;
   try {
-    const { data } = await octokit.pulls.get({
-      owner: org,
-      repo,
-      pull_number: issue,
-      mediaType: {
-        format: "diff",
-      },
+    const githubDiff = new GithubDiff(octokit);
+    //Fetch the statistics of the pull request
+    const stats = await githubDiff.getPullRequestStats(org, repo, issue);
+    //Find the filenames which do not have more than 200 changes
+    let files = stats.filter((file) => file.changes < 500).map((file) => file.filename);
+    //Ignore files like in dist or build or .lock files
+    const ignoredFiles = ["dist/*", "build/*", ".lock", "index.js"];
+    files = files.filter((file) => !ignoredFiles.some((pattern) => file.match(pattern)));
+    //Fetch the diff of the files
+    return await githubDiff.getPullRequestDiffsFiltered(org, repo, issue, {
+      includeFiles: files,
     });
-    return data as unknown as string;
   } catch (error) {
     logger.error(`Error fetching pull request diff`, {
       error: error as Error,
@@ -188,10 +192,9 @@ export async function fetchPullRequestDiff(context: Context, org: string, repo: 
 }
 
 /**
- * Fetches the details of a pull request.
- *
- * @param params - The parameters required to fetch the pull request, including context and other details.
- * @returns A promise that resolves to the pull request details or null if an error occurs.
+ * Fetches an issue from the GitHub API.
+ * @param params - Context
+ * @returns A promise that resolves to an issue object or null if an error occurs.
  */
 export async function fetchIssue(params: FetchParams): Promise<Issue | null> {
   const { octokit, payload, logger } = params.context;
@@ -295,4 +298,14 @@ function castCommentsToSimplifiedComments(comments: Comments, params: FetchParam
       user: comment.user as User,
       url: comment.html_url,
     }));
+}
+
+export async function fetchLinkedPrFromIssue(owner: string, repo: string, issueNumber: number, context: Context) {
+  const prs = await context.octokit.rest.pulls.list({
+    owner: owner,
+    repo: repo,
+    state: "all",
+  });
+  //Filter the PRs which are linked to the issue using the body of the PR
+  return prs.data.filter((pr) => pr.body?.includes(`#${issueNumber}`));
 }

@@ -1,7 +1,7 @@
 import { Context } from "../types";
 import { StreamlinedComment, StreamlinedComments } from "../types/llm";
 import { createKey, streamlineComments } from "../handlers/comments";
-import { fetchPullRequestDiff, fetchIssue, fetchIssueComments } from "./issue-fetching";
+import { fetchPullRequestDiff, fetchIssue, fetchIssueComments, fetchLinkedPrFromIssue } from "./issue-fetching";
 import { splitKey } from "./issue";
 
 /**
@@ -83,7 +83,9 @@ async function createContextBlockSection(
   if (!issueNumber || isNaN(issueNumber)) {
     throw context.logger.error("Issue number is not valid");
   }
-  const prDiff = await fetchPullRequestDiff(context, org, repo, issueNumber);
+  const pulls = await fetchLinkedPrFromIssue(org, repo, issueNumber, context);
+  const prDiffs = await Promise.all(pulls.map(async (pull) => await fetchPullRequestDiff(context, org, repo, pull.number)));
+  const prDiff = prDiffs.join("\n");
   const specHeader = getCorrectHeaderString(prDiff, issueNumber, isCurrentIssue, false);
   let specOrBody = specAndBodies[key];
   if (!specOrBody) {

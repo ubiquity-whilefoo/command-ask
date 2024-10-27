@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { Context } from "../../../types";
 import { SuperOpenAi } from "./openai";
 import { CompletionsModelHelper, ModelApplications } from "../../../types/llm";
+import { encode } from "gpt-tokenizer";
 const MAX_TOKENS = 7000;
 
 export interface CompletionsType {
@@ -46,10 +47,10 @@ export class Completions extends SuperOpenAi {
                 "Your name is : " +
                 botName +
                 "\n" +
-                "Primary Context: " +
-                additionalContext.join("\n") +
-                "\nLocal Context: " +
-                localContext.join("\n"),
+                "Main Context (Provide additional precedence in terms of information): " +
+                localContext.join("\n") +
+                "Secondary Context: " +
+                additionalContext.join("\n"),
             },
           ],
         },
@@ -116,5 +117,9 @@ export class Completions extends SuperOpenAi {
     });
 
     return res.choices[0].message.content;
+  }
+
+  async findTokenLength(prompt: string, additionalContext: string[], localContext: string[], groundTruths: string[]): Promise<number> {
+    return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n")).length;
   }
 }

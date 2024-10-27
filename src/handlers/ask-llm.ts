@@ -38,7 +38,7 @@ export async function askQuestion(context: Context, question: string) {
 export async function askGpt(context: Context, question: string, formattedChat: string[]): Promise<CompletionsType> {
   const {
     env: { UBIQUITY_OS_APP_NAME },
-    config: { model, similarityThreshold },
+    config: { model, similarityThreshold, maxTokens },
   } = context;
   let similarComments: CommentSimilaritySearchResult[] = [];
   let similarIssues: IssueSimilaritySearchResult[] = [];
@@ -69,5 +69,5 @@ export async function askGpt(context: Context, question: string, formattedChat: 
   //Calculate the current context size in tokens
   const numTokens = await context.adapters.openai.completions.findTokenLength(question, rerankedText, formattedChat, groundTruths);
   context.logger.info(`Number of tokens: ${numTokens}`);
-  return context.adapters.openai.completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);
+  return context.adapters.openai.completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
 }

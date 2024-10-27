@@ -1,7 +1,7 @@
 import { GithubDiff } from "github-diff-tool";
 import { createKey, getAllStreamlinedComments } from "../handlers/comments";
 import { Context } from "../types";
-import { IssueWithUser, SimplifiedComment, User } from "../types/github-types";
+import { IssueWithUser, LinkedPullsToIssue, SimplifiedComment, User } from "../types/github-types";
 import { FetchParams, Issue, Comments, LinkedIssues } from "../types/github-types";
 import { StreamlinedComment } from "../types/llm";
 import {
@@ -319,14 +319,41 @@ function castCommentsToSimplifiedComments(comments: Comments, params: FetchParam
     }));
 }
 
-export async function fetchLinkedPrFromIssue(owner: string, repo: string, issueNumber: number, context: Context) {
-  const prs = await context.octokit.rest.pulls.list({
-    owner: owner,
-    repo: repo,
-    state: "all",
-  });
-  //Filter the PRs which are linked to the issue using the body of the PR
-  return prs.data.filter((pr) => pr.body?.includes(`#${issueNumber}`));
+export async function fetchLinkedPullRequests(owner: string, repo: string, issueNumber: number, context: Context) {
+  const query = `
+    query($owner: String!, $repo: String!, $issueNumber: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $issueNumber) {
+          closedByPullRequestsReferences(first: 100) {
+            nodes {
+              number
+              title
+              state
+              merged
+              url
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const { repository } = await context.octokit.graphql<LinkedPullsToIssue>(query, {
+      owner,
+      repo,
+      issueNumber,
+    });
+    return repository.issue.closedByPullRequestsReferences.nodes;
+  } catch (error) {
+    context.logger.error(`Error fetching linked PRs from issue`, {
+      error: error as Error,
+      owner,
+      repo,
+      issueNumber,
+    });
+    return null;
+  }
 }
 
 async function buildIgnoreFilesFromGitIgnore(context: Context, owner: string, repo: string): Promise<string[] | null> {

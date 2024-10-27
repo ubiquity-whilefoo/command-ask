@@ -1,9 +1,8 @@
 import { Context } from "../types";
 import { StreamlinedComment, StreamlinedComments } from "../types/llm";
 import { createKey, streamlineComments } from "../handlers/comments";
-import { fetchPullRequestDiff, fetchIssue, fetchIssueComments, fetchLinkedPrFromIssue } from "./issue-fetching";
+import { fetchPullRequestDiff, fetchIssue, fetchIssueComments, fetchLinkedPullRequests } from "./issue-fetching";
 import { splitKey } from "./issue";
-const MAX_TOKENS_ALLOWED = 7000;
 
 /**
  * Formats the chat history by combining streamlined comments and specifications or bodies for issues and pull requests.
@@ -72,6 +71,7 @@ async function createContextBlockSection(
   isCurrentIssue: boolean,
   currentContextTokenCount: number = 0
 ): Promise<[number, string]> {
+  const maxTokens = context.config.maxTokens;
   let comments = streamlined[key];
   if (!comments || comments.length === 0) {
     const [owner, repo, number] = splitKey(key);
@@ -88,14 +88,14 @@ async function createContextBlockSection(
   if (!issueNumber || isNaN(issueNumber)) {
     throw context.logger.error("Issue number is not valid");
   }
-  const pulls = await fetchLinkedPrFromIssue(org, repo, issueNumber, context);
+  const pulls = (await fetchLinkedPullRequests(org, repo, issueNumber, context)) || [];
   const prDiffs = await Promise.all(pulls.map((pull) => fetchPullRequestDiff(context, org, repo, pull.number)));
   let prDiff: string | null = null;
   for (const pullDiff of prDiffs.flat()) {
-    if (currentContextTokenCount > MAX_TOKENS_ALLOWED) break;
+    if (currentContextTokenCount > maxTokens) break;
     if (pullDiff) {
       const tokenLength = await context.adapters.openai.completions.findTokenLength(pullDiff.diff);
-      if (currentContextTokenCount + tokenLength > MAX_TOKENS_ALLOWED) break;
+      if (currentContextTokenCount + tokenLength > maxTokens) break;
       currentContextTokenCount += tokenLength;
       prDiff = (prDiff ? prDiff + "\n" : "") + pullDiff.diff;
     }

@@ -3,7 +3,6 @@ import { Context } from "../../../types";
 import { SuperOpenAi } from "./openai";
 import { CompletionsModelHelper, ModelApplications } from "../../../types/llm";
 import { encode } from "gpt-tokenizer";
-const MAX_TOKENS = 7000;
 
 export interface CompletionsType {
   answer: string;
@@ -29,7 +28,8 @@ export class Completions extends SuperOpenAi {
     additionalContext: string[],
     localContext: string[],
     groundTruths: string[],
-    botName: string
+    botName: string,
+    maxTokens: number
   ): Promise<CompletionsType> {
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({
       model: model,
@@ -65,7 +65,7 @@ export class Completions extends SuperOpenAi {
         },
       ],
       temperature: 0.2,
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens,
       top_p: 0.5,
       frequency_penalty: 0,
       presence_penalty: 0,

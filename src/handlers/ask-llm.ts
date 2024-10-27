@@ -59,18 +59,6 @@ export async function askGpt(context: Context, question: string, formattedChat: 
   formattedChat = formattedChat.filter((text) => text !== null);
   similarText = similarText.filter((text) => text !== "");
   const rerankedText = similarText.length > 0 ? await context.adapters.voyage.reranker.reRankResults(similarText, question) : [];
-  //Calculate the current context size in tokens
-  const numTokens = await context.adapters.openai.completions.findTokenLength(question, rerankedText, formattedChat, [
-    "typescript",
-    "github",
-    "cloudflare worker",
-    "actions",
-    "jest",
-    "supabase",
-    "openai",
-  ]);
-  context.logger.info(`Number of tokens: ${numTokens}`);
-
   const languages = await fetchRepoLanguageStats(context);
   const { dependencies, devDependencies } = await fetchRepoDependencies(context);
   const groundTruths = await findGroundTruths(context, "chat-bot", {
@@ -78,6 +66,8 @@ export async function askGpt(context: Context, question: string, formattedChat: 
     dependencies,
     devDependencies,
   });
-
+  //Calculate the current context size in tokens
+  const numTokens = await context.adapters.openai.completions.findTokenLength(question, rerankedText, formattedChat, groundTruths);
+  context.logger.info(`Number of tokens: ${numTokens}`);
   return context.adapters.openai.completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);
 }

@@ -4187,10 +4187,10 @@ git-raw-commits@^4.0.0:
     meow "^12.0.1"
     split2 "^4.0.0"
 
-github-diff-tool@^1.0.3:
-  version "1.0.3"
-  resolved "https://registry.yarnpkg.com/github-diff-tool/-/github-diff-tool-1.0.3.tgz#6845765b36b9f86ea0160f6c90e8a5774c274799"
-  integrity sha512-h+0XfJwzMwp6V5SwLZp/HANGgCMx3a+ulYe1V9rQ/HM5nvvDNtuUCAkdTv6Aa6qGxoX3BpATTQLJmFEnjmk94A==
+github-diff-tool@^1.0.6:
+  version "1.0.6"
+  resolved "https://registry.yarnpkg.com/github-diff-tool/-/github-diff-tool-1.0.6.tgz#e633b46397db850ad3dc0d500450357cb7ee26f9"
+  integrity sha512-DOqKck+WUj3HsfOwef5cjS32qqOkKWFncIl4erBtp2+dfccrkSi6Ee14mKGnrQaAhMrx/9LWFh8X5KGivZVY8A==
   dependencies:
     dotenv "^16.3.1"
     esbuild "^0.24.0"

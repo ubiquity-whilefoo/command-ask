@@ -165,21 +165,40 @@ export async function mergeCommentsAndFetchSpec(
  * @param issue - The pull request number.
  * @returns A promise that resolves to the diff of the pull request as a string, or null if an error occurs.
  */
-export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number): Promise<string | null> {
+export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number): Promise<{ diff: string; diffSize: number }[] | null> {
   const { octokit, logger } = context;
   try {
     const githubDiff = new GithubDiff(octokit);
     //Fetch the statistics of the pull request
     const stats = await githubDiff.getPullRequestStats(org, repo, issue);
-    //Find the filenames which do not have more than 200 changes
-    let files = stats.filter((file) => file.changes < 500).map((file) => file.filename);
     //Ignore files like in dist or build or .lock files
-    const ignoredFiles = ["dist/*", "build/*", ".lock", "index.js"];
-    files = files.filter((file) => !ignoredFiles.some((pattern) => file.match(pattern)));
+    const ignoredFiles = (await buildIgnoreFilesFromGitIgnore(context, org, repo)) || [];
+    const files = stats
+      .filter((file) => !ignoredFiles.some((pattern) => file.filename.includes(pattern)))
+      .map((file) => ({ filename: file.filename, diffSizeInBytes: file.diffSizeInBytes }));
     //Fetch the diff of the files
-    return await githubDiff.getPullRequestDiffsFiltered(org, repo, issue, {
-      includeFiles: files,
-    });
+    const prDiffs = await Promise.all(
+      files.map(async (file) => {
+        let diff = null;
+        try {
+          diff = await githubDiff.getPullRequestDiff({
+            owner: org,
+            repo,
+            pullNumber: issue,
+            filePath: file.filename,
+          });
+        } catch {
+          logger.error(`Error fetching pull request diff for the file`, {
+            owner: org,
+            repo,
+            pull_number: issue,
+            file: file.filename,
+          });
+        }
+        return diff ? { diff: file.filename + diff, diffSize: file.diffSizeInBytes } : null;
+      })
+    );
+    return prDiffs.filter((diff): diff is { diff: string; diffSize: number } => diff !== null).sort((a, b) => a.diffSize - b.diffSize);
   } catch (error) {
     logger.error(`Error fetching pull request diff`, {
       error: error as Error,
@@ -308,4 +327,32 @@ export async function fetchLinkedPrFromIssue(owner: string, repo: string, issueN
   });
   //Filter the PRs which are linked to the issue using the body of the PR
   return prs.data.filter((pr) => pr.body?.includes(`#${issueNumber}`));
+}
+
+async function buildIgnoreFilesFromGitIgnore(context: Context, owner: string, repo: string): Promise<string[] | null> {
+  try {
+    const gitignore = await context.octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: ".gitignore",
+    });
+    // Build an array of files to ignore
+    const ignoreFiles: string[] = [];
+    if ("content" in gitignore.data) {
+      const content = Buffer.from(gitignore.data.content, "base64").toString();
+      content.split("\n").forEach((line) => {
+        if (line && !line.startsWith("#")) {
+          ignoreFiles.push(line);
+        }
+      });
+    }
+    return ignoreFiles;
+  } catch (error) {
+    context.logger.error(`Error fetching .gitignore file`, {
+      error: error as Error,
+      owner,
+      repo,
+    });
+    return null;
+  }
 }

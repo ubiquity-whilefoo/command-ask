@@ -119,7 +119,7 @@ export class Completions extends SuperOpenAi {
     return res.choices[0].message.content;
   }
 
-  async findTokenLength(prompt: string, additionalContext: string[], localContext: string[], groundTruths: string[]): Promise<number> {
+  async findTokenLength(prompt: string, additionalContext: string[] = [], localContext: string[] = [], groundTruths: string[] = []): Promise<number> {
     return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n")).length;
   }
 }

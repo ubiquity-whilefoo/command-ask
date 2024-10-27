@@ -69,7 +69,6 @@ export async function askGpt(context: Context, question: string, formattedChat: 
     "supabase",
     "openai",
   ]);
-  // TODO: If numTokens exceed limit then limit the context size
   context.logger.info(`Number of tokens: ${numTokens}`);
 
   const languages = await fetchRepoLanguageStats(context);

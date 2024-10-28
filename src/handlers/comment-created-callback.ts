@@ -47,7 +47,7 @@ export async function issueCommentCreatedCallback(
     await addCommentToIssue(context, commentToPost);
     return { status: 200, reason: logger.info("Comment posted successfully").logMessage.raw };
   } catch (error) {
-    throw await bubbleUpErrorComment(context, error);
+    throw await bubbleUpErrorComment(context, error, false);
   }
 }
 

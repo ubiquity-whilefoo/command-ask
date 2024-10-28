@@ -12,16 +12,22 @@ export async function fetchRepoDependencies(context: Context) {
     },
   } = context;
 
-  const { data: packageJson } = await octokit.repos.getContent({
-    owner,
-    repo,
-    path: "package.json",
-  });
+  try {
+    const { data: packageJson } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path: "package.json",
+    });
 
-  if ("content" in packageJson) {
-    return extractDependencies(JSON.parse(Buffer.from(packageJson.content, "base64").toString()));
-  } else {
-    throw logger.error(`No package.json found in ${owner}/${repo}`);
+    if ("content" in packageJson) {
+      return extractDependencies(JSON.parse(Buffer.from(packageJson.content, "base64").toString()));
+    }
+  } catch (err) {
+    logger.error(`Error fetching package.json for ${owner}/${repo}`, { err });
+  }
+  return {
+    dependencies: {},
+    devDependencies: {},
   }
 }
 
@@ -44,21 +50,25 @@ export async function fetchRepoLanguageStats(context: Context) {
       },
     },
   } = context;
+  try {
 
-  const { data: languages } = await octokit.repos.listLanguages({
-    owner,
-    repo,
-  });
+    const { data: languages } = await octokit.repos.listLanguages({
+      owner,
+      repo,
+    });
 
-  const totalBytes = Object.values(languages).reduce((acc, bytes) => acc + bytes, 0);
+    const totalBytes = Object.values(languages).reduce((acc, bytes) => acc + bytes, 0);
 
-  const stats = Object.entries(languages).reduce(
-    (acc, [language, bytes]) => {
-      acc[language] = bytes / totalBytes;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+    const stats = Object.entries(languages).reduce(
+      (acc, [language, bytes]) => {
+        acc[language] = bytes / totalBytes;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
-  return Array.from(Object.entries(stats)).sort((a, b) => b[1] - a[1]);
+    return Array.from(Object.entries(stats)).sort((a, b) => b[1] - a[1]);
+  } catch (err) {
+    throw logger.error(`Error fetching language stats for ${owner}/${repo}`, { err });
+  }
 }

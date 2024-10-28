@@ -28,7 +28,7 @@ export async function fetchRepoDependencies(context: Context) {
   return {
     dependencies: {},
     devDependencies: {},
-  }
+  };
 }
 
 export function extractDependencies(packageJson: Record<string, Record<string, string>>) {
@@ -51,7 +51,6 @@ export async function fetchRepoLanguageStats(context: Context) {
     },
   } = context;
   try {
-
     const { data: languages } = await octokit.repos.listLanguages({
       owner,
       repo,

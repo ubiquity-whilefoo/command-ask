@@ -44,3 +44,21 @@ export type FetchedCodes = {
   repo: string;
   issueNumber: number;
 };
+
+export type FetchedPulls = {
+  number: number;
+  title: string;
+  state: string;
+  merged: boolean;
+  url: string;
+};
+
+export type LinkedPullsToIssue = {
+  repository: {
+    issue: {
+      closedByPullRequestsReferences: {
+        nodes: FetchedPulls[];
+      };
+    };
+  };
+};

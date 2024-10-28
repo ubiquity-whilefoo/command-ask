@@ -1,6 +1,7 @@
+import { GithubDiff } from "github-diff-tool";
 import { createKey, getAllStreamlinedComments } from "../handlers/comments";
 import { Context } from "../types";
-import { IssueWithUser, SimplifiedComment, User } from "../types/github-types";
+import { IssueWithUser, LinkedPullsToIssue, SimplifiedComment, User } from "../types/github-types";
 import { FetchParams, Issue, Comments, LinkedIssues } from "../types/github-types";
 import { StreamlinedComment } from "../types/llm";
 import {
@@ -164,18 +165,36 @@ export async function mergeCommentsAndFetchSpec(
  * @param issue - The pull request number.
  * @returns A promise that resolves to the diff of the pull request as a string, or null if an error occurs.
  */
-export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number): Promise<string | null> {
+export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number): Promise<{ diff: string; diffSize: number }[] | null> {
   const { octokit, logger } = context;
   try {
-    const { data } = await octokit.pulls.get({
-      owner: org,
-      repo,
-      pull_number: issue,
-      mediaType: {
-        format: "diff",
-      },
-    });
-    return data as unknown as string;
+    const githubDiff = new GithubDiff(octokit);
+    //Fetch the statistics of the pull request
+    const stats = await githubDiff.getPullRequestStats(org, repo, issue);
+    const files = stats.map((file) => ({ filename: file.filename, diffSizeInBytes: file.diffSizeInBytes }));
+    //Fetch the diff of the files
+    const prDiffs = await Promise.all(
+      files.map(async (file) => {
+        let diff = null;
+        try {
+          diff = await githubDiff.getPullRequestDiff({
+            owner: org,
+            repo,
+            pullNumber: issue,
+            filePath: file.filename,
+          });
+        } catch {
+          logger.error(`Error fetching pull request diff for the file`, {
+            owner: org,
+            repo,
+            pull_number: issue,
+            file: file.filename,
+          });
+        }
+        return diff ? { diff: file.filename + diff, diffSize: file.diffSizeInBytes } : null;
+      })
+    );
+    return prDiffs.filter((diff): diff is { diff: string; diffSize: number } => diff !== null).sort((a, b) => a.diffSize - b.diffSize);
   } catch (error) {
     logger.error(`Error fetching pull request diff`, {
       error: error as Error,
@@ -188,10 +207,9 @@ export async function fetchPullRequestDiff(context: Context, org: string, repo: 
 }
 
 /**
- * Fetches the details of a pull request.
- *
- * @param params - The parameters required to fetch the pull request, including context and other details.
- * @returns A promise that resolves to the pull request details or null if an error occurs.
+ * Fetches an issue from the GitHub API.
+ * @param params - Context
+ * @returns A promise that resolves to an issue object or null if an error occurs.
  */
 export async function fetchIssue(params: FetchParams): Promise<Issue | null> {
   const { octokit, payload, logger } = params.context;
@@ -295,4 +313,41 @@ function castCommentsToSimplifiedComments(comments: Comments, params: FetchParam
       user: comment.user as User,
       url: comment.html_url,
     }));
+}
+
+export async function fetchLinkedPullRequests(owner: string, repo: string, issueNumber: number, context: Context) {
+  const query = `
+    query($owner: String!, $repo: String!, $issueNumber: Int!) {
+      repository(owner: $owner, name: $repo) {
+        issue(number: $issueNumber) {
+          closedByPullRequestsReferences(first: 100) {
+            nodes {
+              number
+              title
+              state
+              merged
+              url
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const { repository } = await context.octokit.graphql<LinkedPullsToIssue>(query, {
+      owner,
+      repo,
+      issueNumber,
+    });
+    return repository.issue.closedByPullRequestsReferences.nodes;
+  } catch (error) {
+    context.logger.error(`Error fetching linked PRs from issue`, {
+      error: error as Error,
+      owner,
+      repo,
+      issueNumber,
+    });
+    return null;
+  }
 }

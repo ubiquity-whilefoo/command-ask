@@ -4,7 +4,8 @@ import { CommentSimilaritySearchResult } from "../adapters/supabase/helpers/comm
 import { IssueSimilaritySearchResult } from "../adapters/supabase/helpers/issues";
 import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
 import { formatChatHistory } from "../helpers/format-chat-history";
-import { optimizeContext } from "../helpers/issue";
+import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
+import { findGroundTruths } from "./ground-truths/find-ground-truths";
 
 /**
  * Asks a question to GPT and returns the response
@@ -37,7 +38,7 @@ export async function askQuestion(context: Context, question: string) {
 export async function askGpt(context: Context, question: string, formattedChat: string[]): Promise<CompletionsType> {
   const {
     env: { UBIQUITY_OS_APP_NAME },
-    config: { model, similarityThreshold },
+    config: { model, similarityThreshold, maxTokens },
   } = context;
   let similarComments: CommentSimilaritySearchResult[] = [];
   let similarIssues: IssueSimilaritySearchResult[] = [];
@@ -56,18 +57,25 @@ export async function askGpt(context: Context, question: string, formattedChat: 
   // Remove Null Results (Private Comments)
   similarText = similarText.filter((text) => text !== null);
   formattedChat = formattedChat.filter((text) => text !== null);
-  // Optimize the context
-  formattedChat = optimizeContext(formattedChat);
-  // ReRank the results based on the question
-  // const reRankedChat = formattedChat.length > 0 ? await context.adapters.voyage.reranker.reRankResults(formattedChat.filter(text => text !== ""), question, 300) : [];
   similarText = similarText.filter((text) => text !== "");
   const rerankedText = similarText.length > 0 ? await context.adapters.voyage.reranker.reRankResults(similarText, question) : [];
-  return context.adapters.openai.completions.createCompletion(
-    question,
-    model,
-    rerankedText,
-    formattedChat,
-    ["typescript", "github", "cloudflare worker", "actions", "jest", "supabase", "openai"],
-    UBIQUITY_OS_APP_NAME
-  );
+  const languages = await fetchRepoLanguageStats(context);
+  let dependencies = {};
+  let devDependencies = {};
+  try {
+    const deps = await fetchRepoDependencies(context);
+    dependencies = deps.dependencies;
+    devDependencies = deps.devDependencies;
+  } catch (error) {
+    context.logger.error(`Unable to Fetch Dependencies: ${(error as Error).message}`);
+  }
+  const groundTruths = await findGroundTruths(context, "chat-bot", {
+    languages,
+    dependencies,
+    devDependencies,
+  });
+  //Calculate the current context size in tokens
+  const numTokens = await context.adapters.openai.completions.findTokenLength(question, rerankedText, formattedChat, groundTruths);
+  context.logger.info(`Number of tokens: ${numTokens}`);
+  return context.adapters.openai.completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
 }

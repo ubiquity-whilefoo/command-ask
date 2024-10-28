@@ -168,61 +168,6 @@ export async function fetchCodeLinkedFromIssue(
 }
 
 /**
- * Optimizes the context strings by removing duplicates and sorting by information density.
- * Removes exact duplicates and sorts by information density and length.
- *
- * @param strings - The array of context strings to optimize.
- * @returns The optimized array of context strings.
- */
-export function optimizeContext(strings: string[]): string[] {
-  // Helper function to clean strings while preserving links
-  function cleanString(inputString: string): string {
-    // Preserve links by temporarily replacing them
-    const links: string[] = [];
-    inputString = inputString.replace(/https?:\/\/\S+/g, (match) => {
-      links.push(match);
-      return `__LINK${links.length - 1}__`;
-    });
-    // Clean the string
-    inputString = inputString
-      .replace(/[^\w\s-/]|_/g, "") // Remove punctuation except '-' and '/'
-      .replace(/\s+/g, " ")
-      .trim()
-      .toLowerCase();
-    // Restore links
-    inputString = inputString.replace(/__LINK(\d+)__/g, (i) => links[parseInt(i)]);
-
-    return inputString;
-  }
-  // Helper function to calculate information density
-  function informationDensity(s: string): number {
-    const words = s.split(/\s+/);
-    const uniqueWords = new Set(words);
-    return uniqueWords.size / words.length;
-  }
-  // Clean and remove empty strings
-  const cleanedStrings = strings.map(cleanString).filter((s) => s.length > 0);
-  // Remove exact duplicates
-  const uniqueStrings = Array.from(new Set(cleanedStrings));
-  // Sort strings by information density and length
-  uniqueStrings.sort((a, b) => {
-    const densityDiff = informationDensity(b) - informationDensity(a);
-    return densityDiff !== 0 ? densityDiff : b.length - a.length;
-  });
-  const result: string[] = [];
-  const wordSet = new Set<string>();
-  for (const str of uniqueStrings) {
-    const words = str.split(/\s+/);
-    const newWords = words.filter((word) => !wordSet.has(word) && !word.startsWith("http"));
-    if (newWords.length > 0 || str.includes("http")) {
-      result.push(str);
-      newWords.forEach((word) => wordSet.add(word));
-    }
-  }
-  return result;
-}
-
-/**
  * Extracts and returns the README content from the repository associated with the given issue.
  *
  * @param params - The parameters required to fetch the README, including the context with octokit instance.

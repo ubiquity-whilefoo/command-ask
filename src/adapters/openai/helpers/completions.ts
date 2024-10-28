@@ -1,10 +1,12 @@
 import OpenAI from "openai";
 import { Context } from "../../../types";
 import { SuperOpenAi } from "./openai";
-const MAX_TOKENS = 7000;
+import { CompletionsModelHelper, ModelApplications } from "../../../types/llm";
+import { encode } from "gpt-tokenizer";
 
 export interface CompletionsType {
   answer: string;
+  groundTruths: string[];
   tokenUsage: {
     input: number;
     output: number;
@@ -26,7 +28,8 @@ export class Completions extends SuperOpenAi {
     additionalContext: string[],
     localContext: string[],
     groundTruths: string[],
-    botName: string
+    botName: string,
+    maxTokens: number
   ): Promise<CompletionsType> {
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({
       model: model,
@@ -44,10 +47,10 @@ export class Completions extends SuperOpenAi {
                 "Your name is : " +
                 botName +
                 "\n" +
-                "Primary Context: " +
-                additionalContext.join("\n") +
-                "\nLocal Context: " +
-                localContext.join("\n"),
+                "Main Context (Provide additional precedence in terms of information): " +
+                localContext.join("\n") +
+                "Secondary Context: " +
+                additionalContext.join("\n"),
             },
           ],
         },
@@ -62,7 +65,7 @@ export class Completions extends SuperOpenAi {
         },
       ],
       temperature: 0.2,
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens,
       top_p: 0.5,
       frequency_penalty: 0,
       presence_penalty: 0,
@@ -72,8 +75,51 @@ export class Completions extends SuperOpenAi {
     });
     const answer = res.choices[0].message;
     if (answer && answer.content && res.usage) {
-      return { answer: answer.content, tokenUsage: { input: res.usage.prompt_tokens, output: res.usage.completion_tokens, total: res.usage.total_tokens } };
+      return {
+        answer: answer.content,
+        groundTruths,
+        tokenUsage: { input: res.usage.prompt_tokens, output: res.usage.completion_tokens, total: res.usage.total_tokens },
+      };
     }
-    return { answer: "", tokenUsage: { input: 0, output: 0, total: 0 } };
+    return { answer: "", tokenUsage: { input: 0, output: 0, total: 0 }, groundTruths };
+  }
+
+  async createGroundTruthCompletion<TApp extends ModelApplications>(
+    context: Context,
+    groundTruthSource: string,
+    systemMsg: string,
+    model: CompletionsModelHelper<TApp>
+  ): Promise<string | null> {
+    const {
+      env: { OPENAI_API_KEY },
+      config: { openAiBaseUrl },
+    } = context;
+
+    const openAi = new OpenAI({
+      apiKey: OPENAI_API_KEY,
+      ...(openAiBaseUrl && { baseURL: openAiBaseUrl }),
+    });
+
+    const msgs = [
+      {
+        role: "system",
+        content: systemMsg,
+      },
+      {
+        role: "user",
+        content: groundTruthSource,
+      },
+    ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+
+    const res = await openAi.chat.completions.create({
+      messages: msgs,
+      model: model,
+    });
+
+    return res.choices[0].message.content;
+  }
+
+  async findTokenLength(prompt: string, additionalContext: string[] = [], localContext: string[] = [], groundTruths: string[] = []): Promise<number> {
+    return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n")).length;
   }
 }

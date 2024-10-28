@@ -1,7 +1,7 @@
 import { Context } from "../types";
 import { StreamlinedComment, StreamlinedComments } from "../types/llm";
 import { createKey, streamlineComments } from "../handlers/comments";
-import { fetchPullRequestDiff, fetchIssue, fetchIssueComments } from "./issue-fetching";
+import { fetchPullRequestDiff, fetchIssue, fetchIssueComments, fetchLinkedPullRequests } from "./issue-fetching";
 import { splitKey } from "./issue";
 
 /**
@@ -18,10 +18,13 @@ export async function formatChatHistory(
   specAndBodies: Record<string, string>
 ): Promise<string[]> {
   const keys = new Set([...Object.keys(streamlined), ...Object.keys(specAndBodies), createKey(context.payload.issue.html_url)]);
+  let runningTokenCount = 0;
   const chatHistory = await Promise.all(
     Array.from(keys).map(async (key) => {
       const isCurrentIssue = key === createKey(context.payload.issue.html_url);
-      return createContextBlockSection(context, key, streamlined, specAndBodies, isCurrentIssue);
+      const [currentTokenCount, result] = await createContextBlockSection(context, key, streamlined, specAndBodies, isCurrentIssue, runningTokenCount);
+      runningTokenCount += currentTokenCount;
+      return result;
     })
   );
   return Array.from(new Set(chatHistory));
@@ -65,8 +68,10 @@ async function createContextBlockSection(
   key: string,
   streamlined: Record<string, StreamlinedComment[]>,
   specAndBodies: Record<string, string>,
-  isCurrentIssue: boolean
-) {
+  isCurrentIssue: boolean,
+  currentContextTokenCount: number = 0
+): Promise<[number, string]> {
+  const maxTokens = context.config.maxTokens;
   let comments = streamlined[key];
   if (!comments || comments.length === 0) {
     const [owner, repo, number] = splitKey(key);
@@ -83,7 +88,18 @@ async function createContextBlockSection(
   if (!issueNumber || isNaN(issueNumber)) {
     throw context.logger.error("Issue number is not valid");
   }
-  const prDiff = await fetchPullRequestDiff(context, org, repo, issueNumber);
+  const pulls = (await fetchLinkedPullRequests(org, repo, issueNumber, context)) || [];
+  const prDiffs = await Promise.all(pulls.map((pull) => fetchPullRequestDiff(context, org, repo, pull.number)));
+  let prDiff: string | null = null;
+  for (const pullDiff of prDiffs.flat()) {
+    if (currentContextTokenCount > maxTokens) break;
+    if (pullDiff) {
+      const tokenLength = await context.adapters.openai.completions.findTokenLength(pullDiff.diff);
+      if (currentContextTokenCount + tokenLength > maxTokens) break;
+      currentContextTokenCount += tokenLength;
+      prDiff = (prDiff ? prDiff + "\n" : "") + pullDiff.diff;
+    }
+  }
   const specHeader = getCorrectHeaderString(prDiff, issueNumber, isCurrentIssue, false);
   let specOrBody = specAndBodies[key];
   if (!specOrBody) {
@@ -98,14 +114,16 @@ async function createContextBlockSection(
       )?.body || "No specification or body available";
   }
   const specOrBodyBlock = [createHeader(specHeader, key), createSpecOrBody(specOrBody), createFooter(specHeader)];
+  currentContextTokenCount += await context.adapters.openai.completions.findTokenLength(specOrBody);
   const header = getCorrectHeaderString(prDiff, issueNumber, isCurrentIssue, true);
   const repoString = `${org}/${repo} #${issueNumber}`;
   const block = [specOrBodyBlock.join(""), createHeader(header, repoString), createComment({ issueNumber, repo, org, comments }), createFooter(header)];
+  currentContextTokenCount += await context.adapters.openai.completions.findTokenLength(block.join(" "));
   if (!prDiff) {
-    return block.join("");
+    return [currentContextTokenCount, block.join("")];
   }
-  const diffBlock = [createHeader("Linked Pull Request Code Diff", repoString), prDiff, createFooter("Linked Pull Request Code Diff")];
-  return block.concat(diffBlock).join("");
+  const diffBlock = [createHeader("Linked Pull Request Code Diff", repoString), prDiff, createFooter("\nLinked Pull Request Code Diff")];
+  return [currentContextTokenCount, block.join("") + diffBlock.join("")];
 }
 
 /**

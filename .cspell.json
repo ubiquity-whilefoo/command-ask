@@ -1,7 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
   "version": "0.2",
-  "ignorePaths": ["**/*.json", "**/*.css", "node_modules", "**/*.log", "./src/adapters/supabase/**/**.ts", "/supabase/*"],
+  "ignorePaths": [
+    "**/*.json",
+    "**/*.css",
+    "node_modules",
+    "**/*.log",
+    "./src/adapters/supabase/**/**.ts",
+    "/supabase/*"
+  ],
   "useGitignore": true,
   "language": "en",
   "words": [
@@ -31,10 +38,22 @@
     "nemo",
     "Reranking",
     "mistralai",
+    "Typeguard",
+    "typeguards",
     "OPENROUTER_API_KEY",
     "Openrouter"
   ],
-  "dictionaries": ["typescript", "node", "software-terms"],
-  "import": ["@cspell/dict-typescript/cspell-ext.json", "@cspell/dict-node/cspell-ext.json", "@cspell/dict-software-terms"],
-  "ignoreRegExpList": ["[0-9a-fA-F]{6}"]
+  "dictionaries": [
+    "typescript",
+    "node",
+    "software-terms"
+  ],
+  "import": [
+    "@cspell/dict-typescript/cspell-ext.json",
+    "@cspell/dict-node/cspell-ext.json",
+    "@cspell/dict-software-terms"
+  ],
+  "ignoreRegExpList": [
+    "[0-9a-fA-F]{6}"
+  ]
 }

@@ -7,7 +7,7 @@ import issueTemplate from "./issue-template";
  */
 export const handlers = [
   http.post("https://api.openai.com/v1/chat/completions", () => {
-    const answer = `This is a mock answer for the chat`;
+    const answer = `${JSON.stringify(["This is a mock response from OpenAI"])}`;
 
     return HttpResponse.json({
       usage: {
@@ -84,5 +84,17 @@ export const handlers = [
     HttpResponse.json(
       db.pull.findFirst({ where: { owner: { equals: owner as string }, repo: { equals: repo as string }, number: { equals: Number(pullNumber) } } })
     )
+  ),
+  http.get("https://api.github.com/repos/:owner/:repo/languages", ({ params: { owner, repo } }) =>
+    HttpResponse.json(db.repo.findFirst({ where: { owner: { login: { equals: owner as string } }, name: { equals: repo as string } } }))
+  ),
+  http.get("https://api.github.com/repos/:owner/:repo/contents/:path", () =>
+    HttpResponse.json({
+      type: "file",
+      encoding: "base64",
+      size: 5362,
+      name: "README.md",
+      content: Buffer.from(JSON.stringify({ content: "This is a mock README file" })).toString("base64"),
+    })
   ),
 ];

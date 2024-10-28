@@ -6,9 +6,6 @@ export type IssueComments = RestEndpointMethodTypes["issues"]["listComments"]["r
 export type ReviewComments = RestEndpointMethodTypes["pulls"]["listReviewComments"]["response"]["data"][0];
 export type User = RestEndpointMethodTypes["users"]["getByUsername"]["response"]["data"];
 
-//Modify the Issue add User Type
-export type IssueWithUser = Issue & { user: Partial<User> | null };
-
 export type FetchParams = {
   context: Context;
   issueNum?: number;

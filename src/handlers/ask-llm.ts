@@ -6,6 +6,7 @@ import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
+import { bubbleUpErrorComment } from "../helpers/errors";
 
 /**
  * Asks a question to GPT and returns the response
@@ -45,12 +46,12 @@ export async function askGpt(context: Context, question: string, formattedChat: 
   try {
     similarComments = (await context.adapters.supabase.comment.findSimilarComments(question, 1 - similarityThreshold, "")) || [];
   } catch (error) {
-    context.logger.error(`Error fetching similar comments: ${(error as Error).message}`);
+    throw bubbleUpErrorComment(context, error, false);
   }
   try {
     similarIssues = (await context.adapters.supabase.issue.findSimilarIssues(question, 1 - similarityThreshold, "")) || [];
   } catch (error) {
-    context.logger.error(`Error fetching similar issues: ${(error as Error).message}`);
+    throw bubbleUpErrorComment(context, error, false);
   }
   let similarText = similarComments.map((comment: CommentSimilaritySearchResult) => comment.comment_plaintext);
   similarText.push(...similarIssues.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext));
@@ -67,7 +68,7 @@ export async function askGpt(context: Context, question: string, formattedChat: 
     dependencies = deps.dependencies;
     devDependencies = deps.devDependencies;
   } catch (error) {
-    context.logger.error(`Unable to Fetch Dependencies: ${(error as Error).message}`);
+    throw bubbleUpErrorComment(context, error, false);
   }
   const groundTruths = await findGroundTruths(context, "chat-bot", {
     languages,

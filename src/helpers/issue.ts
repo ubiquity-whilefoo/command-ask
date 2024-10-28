@@ -85,6 +85,7 @@ function createLinkedIssueOrPr(url: string): LinkedIssues {
     repo,
     issueNumber: parseInt(issueNumber),
     url,
+    body: undefined,
   };
 }
 

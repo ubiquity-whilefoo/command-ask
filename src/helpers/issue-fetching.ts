@@ -1,8 +1,7 @@
 import { GithubDiff } from "github-diff-tool";
 import { createKey, getAllStreamlinedComments } from "../handlers/comments";
 import { Context } from "../types";
-import { IssueWithUser, LinkedPullsToIssue, SimplifiedComment, User } from "../types/github-types";
-import { FetchParams, Issue, Comments, LinkedIssues } from "../types/github-types";
+import { IssueComments, FetchParams, Issue, LinkedIssues, LinkedPullsToIssue, ReviewComments, SimplifiedComment } from "../types/github-types";
 import { StreamlinedComment } from "../types/llm";
 import { logger } from "./errors";
 import {
@@ -57,7 +56,7 @@ export async function fetchLinkedIssues(params: FetchParams) {
 
   comments.push({
     body: issue.body,
-    user: issue.user as User,
+    user: issue.user,
     id: issue.id.toString(),
     org: params.owner,
     repo: params.repo,
@@ -70,7 +69,7 @@ export async function fetchLinkedIssues(params: FetchParams) {
     if (readme) {
       comments.push({
         body: readme,
-        user: issue.user as User,
+        user: issue.user,
         id: issue.id.toString(),
         org: params.owner,
         repo: params.repo,
@@ -79,7 +78,7 @@ export async function fetchLinkedIssues(params: FetchParams) {
     }
   } catch (error) {
     params.context.logger.error(`Error fetching README`, {
-      error: error as Error,
+      err: error,
       owner,
       repo,
       issue,
@@ -198,7 +197,7 @@ export async function fetchPullRequestDiff(context: Context, org: string, repo: 
     return prDiffs.filter((diff): diff is { diff: string; diffSize: number } => diff !== null).sort((a, b) => a.diffSize - b.diffSize);
   } catch (error) {
     logger.error(`Error fetching pull request diff`, {
-      error: error as Error,
+      err: error,
       owner: org,
       repo,
       pull_number: issue,
@@ -221,10 +220,10 @@ export async function fetchIssue(params: FetchParams): Promise<Issue | null> {
       repo: repo || payload.repository.name,
       issue_number: issueNum || payload.issue.number,
     });
-    return response.data as IssueWithUser;
+    return response.data;
   } catch (error) {
     logger.error(`Error fetching issue`, {
-      error: error as Error,
+      err: error,
       owner: owner || payload.repository.owner.login,
       repo: repo || payload.repository.name,
       issue_number: issueNum || payload.issue.number,
@@ -243,7 +242,8 @@ export async function fetchIssueComments(params: FetchParams) {
   const { octokit, payload, logger } = params.context;
   const { issueNum, owner, repo } = params;
   const issue = await fetchIssue(params);
-  let comments: Comments = [];
+  let reviewComments: ReviewComments[] = [];
+  let issueComments: IssueComments[] = [];
   try {
     if (issue?.pull_request) {
       const response = await octokit.rest.pulls.listReviewComments({
@@ -251,14 +251,14 @@ export async function fetchIssueComments(params: FetchParams) {
         repo: repo || payload.repository.name,
         pull_number: issueNum || payload.issue.number,
       });
-      comments = response.data;
+      reviewComments = response.data;
     } else {
       const response = await octokit.rest.issues.listComments({
         owner: owner || payload.repository.owner.login,
         repo: repo || payload.repository.name,
         issue_number: issueNum || payload.issue.number,
       });
-      comments = response.data;
+      issueComments = response.data;
     }
   } catch (e) {
     logger.error(`Error fetching comments `, {
@@ -267,9 +267,8 @@ export async function fetchIssueComments(params: FetchParams) {
       repo: repo || payload.repository.name,
       issue_number: issueNum || payload.issue.number,
     });
-    comments = [];
   }
-  comments = comments.filter((comment) => comment.user?.type !== "Bot") as Comments;
+  const comments = [...issueComments, ...reviewComments].filter((comment) => comment.user?.type !== "Bot");
   const simplifiedComments = castCommentsToSimplifiedComments(comments, params);
 
   return {
@@ -299,21 +298,38 @@ export async function fetchAndHandleIssue(
   return streamlinedComments[key] || [];
 }
 
-function castCommentsToSimplifiedComments(comments: Comments, params: FetchParams): SimplifiedComment[] {
+function castCommentsToSimplifiedComments(comments: (IssueComments | ReviewComments)[], params: FetchParams): SimplifiedComment[] {
   if (!comments) {
     return [];
   }
+
   return comments
     .filter((comment) => comment.body !== undefined)
-    .map((comment) => ({
-      id: comment.id.toString(),
-      org: params.owner || params.context.payload.repository.owner.login,
-      repo: params.repo || params.context.payload.repository.name,
-      issueUrl: comment.html_url,
-      body: comment.body as string,
-      user: comment.user as User,
-      url: comment.html_url,
-    }));
+    .map((comment) => {
+      if ("pull_request_review_id" in comment) {
+        return {
+          body: comment.body,
+          user: comment.user,
+          id: comment.id.toString(),
+          org: params.owner || params.context.payload.repository.owner.login,
+          repo: params.repo || params.context.payload.repository.name,
+          issueUrl: comment.html_url,
+        };
+      }
+
+      if ("issue_url" in comment) {
+        return {
+          body: comment.body,
+          user: comment.user,
+          id: comment.id.toString(),
+          org: params.owner || params.context.payload.repository.owner.login,
+          repo: params.repo || params.context.payload.repository.name,
+          issueUrl: comment.issue_url,
+        };
+      }
+
+      throw logger.error("Comment type not recognized", { comment, params });
+    });
 }
 
 export async function fetchLinkedPullRequests(owner: string, repo: string, issueNumber: number, context: Context) {
@@ -344,7 +360,7 @@ export async function fetchLinkedPullRequests(owner: string, repo: string, issue
     return repository.issue.closedByPullRequestsReferences.nodes;
   } catch (error) {
     context.logger.error(`Error fetching linked PRs from issue`, {
-      error: error as Error,
+      err: error,
       owner,
       repo,
       issueNumber,

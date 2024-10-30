@@ -6,6 +6,7 @@ import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
+import { bubbleUpErrorComment } from "../helpers/errors";
 
 /**
  * Asks a question to GPT and returns the response
@@ -39,43 +40,40 @@ export async function askGpt(context: Context, question: string, formattedChat: 
   const {
     env: { UBIQUITY_OS_APP_NAME },
     config: { model, similarityThreshold, maxTokens },
+    adapters: {
+      supabase: { comment, issue },
+      voyage: { reranker },
+      openai: { completions },
+    },
+    logger,
   } = context;
-  let similarComments: CommentSimilaritySearchResult[] = [];
-  let similarIssues: IssueSimilaritySearchResult[] = [];
+
   try {
-    similarComments = (await context.adapters.supabase.comment.findSimilarComments(question, 1 - similarityThreshold, "")) || [];
+    const [similarComments, similarIssues] = await Promise.all([
+      comment.findSimilarComments(question, 1 - similarityThreshold, ""),
+      issue.findSimilarIssues(question, 1 - similarityThreshold, "")
+    ]);
+
+    const similarText = [
+      ...similarComments?.map((comment: CommentSimilaritySearchResult) => comment.comment_plaintext) || [],
+      ...similarIssues?.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext) || []
+    ];
+
+    formattedChat = formattedChat.filter(text => text);
+
+    const rerankedText = similarText.length > 0 ? await reranker.reRankResults(similarText, question) : [];
+    const [languages, { dependencies, devDependencies }] = await Promise.all([
+      fetchRepoLanguageStats(context),
+      fetchRepoDependencies(context)
+    ]);
+
+    const groundTruths = await findGroundTruths(context, "chat-bot", { languages, dependencies, devDependencies });
+
+    const numTokens = await completions.findTokenLength(question, rerankedText, formattedChat, groundTruths);
+    logger.info(`Number of tokens: ${numTokens}`);
+
+    return completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
   } catch (error) {
-    context.logger.error(`Error fetching similar comments: ${(error as Error).message}`);
+    throw bubbleUpErrorComment(context, error, false);
   }
-  try {
-    similarIssues = (await context.adapters.supabase.issue.findSimilarIssues(question, 1 - similarityThreshold, "")) || [];
-  } catch (error) {
-    context.logger.error(`Error fetching similar issues: ${(error as Error).message}`);
-  }
-  let similarText = similarComments.map((comment: CommentSimilaritySearchResult) => comment.comment_plaintext);
-  similarText.push(...similarIssues.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext));
-  // Remove Null Results (Private Comments)
-  similarText = similarText.filter((text) => text !== null);
-  formattedChat = formattedChat.filter((text) => text !== null);
-  similarText = similarText.filter((text) => text !== "");
-  const rerankedText = similarText.length > 0 ? await context.adapters.voyage.reranker.reRankResults(similarText, question) : [];
-  const languages = await fetchRepoLanguageStats(context);
-  let dependencies = {};
-  let devDependencies = {};
-  try {
-    const deps = await fetchRepoDependencies(context);
-    dependencies = deps.dependencies;
-    devDependencies = deps.devDependencies;
-  } catch (error) {
-    context.logger.error(`Unable to Fetch Dependencies: ${(error as Error).message}`);
-  }
-  const groundTruths = await findGroundTruths(context, "chat-bot", {
-    languages,
-    dependencies,
-    devDependencies,
-  });
-  //Calculate the current context size in tokens
-  const numTokens = await context.adapters.openai.completions.findTokenLength(question, rerankedText, formattedChat, groundTruths);
-  context.logger.info(`Number of tokens: ${numTokens}`);
-  return context.adapters.openai.completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
 }

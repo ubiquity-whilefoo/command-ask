@@ -3,6 +3,7 @@ import { pluginSettingsSchema, pluginSettingsValidator } from "./types";
 import { Env, envValidator } from "./types/env";
 import manifest from "../manifest.json";
 import { plugin } from "./plugin";
+import { handleUncaughtError } from "./helpers/errors";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -62,9 +63,3 @@ export default {
     }
   },
 };
-
-function handleUncaughtError(error: unknown) {
-  console.error(error);
-  const status = 500;
-  return new Response(JSON.stringify({ error }), { status: status, headers: { "content-type": "application/json" } });
-}

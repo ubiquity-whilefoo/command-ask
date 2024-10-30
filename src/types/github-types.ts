@@ -2,13 +2,9 @@ import { RestEndpointMethodTypes } from "@octokit/rest";
 import { Context } from "./context";
 
 export type Issue = RestEndpointMethodTypes["issues"]["get"]["response"]["data"];
-export type Comments =
-  | RestEndpointMethodTypes["issues"]["listComments"]["response"]["data"]
-  | RestEndpointMethodTypes["pulls"]["listReviewComments"]["response"]["data"];
+export type IssueComments = RestEndpointMethodTypes["issues"]["listComments"]["response"]["data"][0];
+export type ReviewComments = RestEndpointMethodTypes["pulls"]["listReviewComments"]["response"]["data"][0];
 export type User = RestEndpointMethodTypes["users"]["getByUsername"]["response"]["data"];
-
-//Modify the Issue add User Type
-export type IssueWithUser = Issue & { user: User };
 
 export type FetchParams = {
   context: Context;
@@ -23,12 +19,12 @@ export type LinkedIssues = {
   owner: string;
   url: string;
   comments?: SimplifiedComment[] | null | undefined;
-  body?: string;
+  body: string | undefined;
 };
 
 export type SimplifiedComment = {
-  user: User | Partial<User>;
-  body: string;
+  user: Partial<User> | null;
+  body: string | undefined;
   id: string;
   org: string;
   repo: string;
@@ -36,8 +32,8 @@ export type SimplifiedComment = {
 };
 
 export type FetchedCodes = {
-  body: string;
-  user: User | Partial<User>;
+  body: string | undefined;
+  user: Partial<User> | null;
   issueUrl: string;
   id: string;
   org: string;

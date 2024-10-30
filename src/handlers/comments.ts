@@ -1,3 +1,4 @@
+import { logger } from "../helpers/errors";
 import { splitKey } from "../helpers/issue";
 import { LinkedIssues, SimplifiedComment } from "../types/github-types";
 import { StreamlinedComment } from "../types/llm";
@@ -53,7 +54,10 @@ export function createKey(issueUrl: string, issue?: number) {
   }
 
   if (!key) {
-    throw new Error("Invalid issue url");
+    throw logger.error("Invalid issue URL", {
+      issueUrl,
+      issueNumber: issue,
+    });
   }
 
   if (key.includes("#")) {

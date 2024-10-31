@@ -10,11 +10,14 @@ import { StreamlinedComment } from "../types/llm";
  */
 export async function getAllStreamlinedComments(linkedIssues: LinkedIssues[]) {
   const streamlinedComments: Record<string, StreamlinedComment[]> = {};
+
   for (const issue of linkedIssues) {
     const linkedIssueComments = issue.comments || [];
     if (linkedIssueComments.length === 0) continue;
+
     const linkedStreamlinedComments = streamlineComments(linkedIssueComments);
     if (!linkedStreamlinedComments) continue;
+
     for (const [key, value] of Object.entries(linkedStreamlinedComments)) {
       streamlinedComments[key] = [...(streamlinedComments[key] || []), ...value];
     }
@@ -74,15 +77,15 @@ export function createKey(issueUrl: string, issue?: number) {
  */
 export function streamlineComments(comments: SimplifiedComment[]) {
   const streamlined: Record<string, StreamlinedComment[]> = {};
+
   for (const comment of comments) {
     const { user, issueUrl: url, body } = comment;
-    // Skip bot comments
     if (user?.type === "Bot") continue;
+
     const key = createKey(url);
     const [owner, repo] = splitKey(key);
-    if (!streamlined[key]) {
-      streamlined[key] = [];
-    }
+    streamlined[key] ??= [];
+
     if (user && body) {
       streamlined[key].push({
         user: user.login,

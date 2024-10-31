@@ -4,8 +4,8 @@ export type ModelApplications = "code-review" | "chat-bot";
 
 type ChatBotAppParams = {
   languages: [string, number][];
-  dependencies: Record<string, string>;
-  devDependencies: Record<string, string>;
+  dependencies: Record<string, string> | null;
+  devDependencies: Record<string, string> | null;
 };
 
 type CodeReviewAppParams = {

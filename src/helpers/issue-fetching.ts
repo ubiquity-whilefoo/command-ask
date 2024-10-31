@@ -3,14 +3,7 @@ import { Context } from "../types";
 import { IssueComments, FetchParams, Issue, LinkedIssues, LinkedPullsToIssue, ReviewComments, SimplifiedComment } from "../types/github-types";
 import { StreamlinedComment } from "../types/llm";
 import { logger } from "./errors";
-import {
-  dedupeStreamlinedComments,
-  fetchCodeLinkedFromIssue,
-  idIssueFromComment,
-  mergeStreamlinedComments,
-  pullReadmeFromRepoForIssue,
-  splitKey,
-} from "./issue";
+import { dedupeStreamlinedComments, fetchCodeLinkedFromIssue, idIssueFromComment, mergeStreamlinedComments, splitKey } from "./issue";
 import { handleIssue, handleSpec, handleSpecAndBodyKeys, throttlePromises } from "./issue-handling";
 
 /**

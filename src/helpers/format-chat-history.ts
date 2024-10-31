@@ -117,10 +117,10 @@ async function createContextBlockSection({
 
   let block;
   if (commentSection) {
-    block = [specBlock.join(""), createHeader(blockHeader, key), commentSection, specOrBody, createFooter(blockHeader, key)];
+    block = [specBlock.join("\n"), createHeader(blockHeader, key), commentSection, createFooter(blockHeader, key)];
   } else {
     // in this scenario we have no task/PR conversation, just the spec
-    block = [specBlock.join("")];
+    block = [specBlock.join("\n")];
   }
 
   // only inject the README if this is the current issue as that's likely most relevant
@@ -134,20 +134,24 @@ async function createContextBlockSection({
 
   if (!prDiff) {
     currentContextTokenCount += await context.adapters.openai.completions.findTokenLength(block.join(""));
-    return [currentContextTokenCount, block.join("")];
+    return [currentContextTokenCount, block.join("\n")];
   }
 
-  const blockWithDiff = [block.join(""), createHeader(`Pull Request Diff`, key), prDiff, createFooter(`Pull Request Diff`, key)];
+  const blockWithDiff = [block.join("\n"), createHeader(`Pull Request Diff`, key), prDiff, createFooter(`Pull Request Diff`, key)];
   currentContextTokenCount += await context.adapters.openai.completions.findTokenLength(blockWithDiff.join(""));
-  return [currentContextTokenCount, blockWithDiff.join("")];
+  return [currentContextTokenCount, blockWithDiff.join("\n")];
 }
 
 function createHeader(content: string, repoString: string) {
-  return `=== ${content} === ${repoString} ===\n\n`;
+  return `=== ${content} === ${repoString} ===\n`;
 }
 
 function createFooter(content: string, repoString: string) {
-  return `=== End ${content} === ${repoString} ===\n\n`;
+  return `=== End ${content} === ${repoString} ===\n`;
+}
+
+function createSpecOrBody(specOrBody: string) {
+  return `${specOrBody}\n`;
 }
 
 function createComment(comment: StreamlinedComments, specOrBody: string) {
@@ -166,13 +170,8 @@ function createComment(comment: StreamlinedComments, specOrBody: string) {
 
   const formattedComments = comment.comments.map((c) => `${c.id} ${c.user}: ${c.body}\n`);
 
-
   if (formattedComments.length === 0) {
     return;
   }
   return formattedComments.join("");
-}
-
-function createSpecOrBody(specOrBody: string) {
-  return `${specOrBody}\n`;
 }

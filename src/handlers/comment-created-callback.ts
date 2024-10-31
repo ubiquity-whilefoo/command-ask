@@ -27,24 +27,24 @@ export async function issueCommentCreatedCallback(
     return { status: 204, reason: logger.info("Comment is from a bot. Skipping.").logMessage.raw };
   }
 
-  logger.info(`Asking question: ${question}`);
-  let commentToPost;
   try {
     const response = await askQuestion(context, question);
     const { answer, tokenUsage, groundTruths } = response;
     if (!answer) {
       throw logger.error(`No answer from OpenAI`);
     }
-    logger.info(`Answer: ${answer}`, { tokenUsage });
 
-    const metadata = {
-      groundTruths,
-      tokenUsage,
-    };
+    const metadataString = createStructuredMetadata(
+      "ubiquity-os-llm-response",
+      logger.info(`Answer: ${answer}`, {
+        metadata: {
+          groundTruths,
+          tokenUsage,
+        },
+      })
+    );
 
-    const metadataString = createStructuredMetadata("LLM Ground Truths and Token Usage", logger.info(`Answer: ${answer}`, { metadata }));
-    commentToPost = answer + metadataString;
-    await addCommentToIssue(context, commentToPost);
+    await addCommentToIssue(context, answer + metadataString);
     return { status: 200, reason: logger.info("Comment posted successfully").logMessage.raw };
   } catch (error) {
     throw await bubbleUpErrorComment(context, error, false);

@@ -25,7 +25,6 @@ export async function askQuestion(context: Context, question: string) {
     repo: context.payload.repository.name,
   });
   const formattedChat = await formatChatHistory(context, streamlinedComments, specAndBodies);
-  context.logger.info(`${formattedChat.join("")}`);
   return await askGpt(context, question, formattedChat);
 }
 
@@ -45,7 +44,6 @@ export async function askGpt(context: Context, question: string, formattedChat: 
       voyage: { reranker },
       openai: { completions },
     },
-    logger,
   } = context;
 
   try {
@@ -63,12 +61,7 @@ export async function askGpt(context: Context, question: string, formattedChat: 
 
     const rerankedText = similarText.length > 0 ? await reranker.reRankResults(similarText, question) : [];
     const [languages, { dependencies, devDependencies }] = await Promise.all([fetchRepoLanguageStats(context), fetchRepoDependencies(context)]);
-
     const groundTruths = await findGroundTruths(context, "chat-bot", { languages, dependencies, devDependencies });
-
-    const numTokens = await completions.findTokenLength(question, rerankedText, formattedChat, groundTruths);
-    logger.info(`Number of tokens: ${numTokens}`);
-
     return completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
   } catch (error) {
     throw bubbleUpErrorComment(context, error, false);

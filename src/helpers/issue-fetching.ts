@@ -60,28 +60,6 @@ export async function fetchLinkedIssues(params: FetchParams) {
     issueUrl: issue.html_url,
   });
 
-  //Fetch the README of the repository
-  try {
-    const readme = await pullReadmeFromRepoForIssue(params);
-    if (readme) {
-      comments.push({
-        body: readme,
-        user: issue.user,
-        id: issue.id.toString(),
-        org: params.owner,
-        repo: params.repo,
-        issueUrl: issue.html_url,
-      });
-    }
-  } catch (error) {
-    params.context.logger.error(`Error fetching README`, {
-      err: error,
-      owner,
-      repo,
-      issue,
-    });
-  }
-
   for (const comment of comments) {
     const foundIssues = idIssueFromComment(comment.body, params);
     const foundCodes = comment.body ? await fetchCodeLinkedFromIssue(comment.body, params.context, comment.issueUrl) : [];
@@ -218,6 +196,14 @@ export async function fetchIssueComments(params: FetchParams) {
         pull_number: issueNum || payload.issue.number,
       });
       reviewComments = response.data;
+
+      const response2 = await octokit.rest.issues.listComments({
+        owner: owner || payload.repository.owner.login,
+        repo: repo || payload.repository.name,
+        issue_number: issueNum || payload.issue.number,
+      });
+
+      issueComments = response2.data;
     } else {
       const response = await octokit.rest.issues.listComments({
         owner: owner || payload.repository.owner.login,

@@ -1,10 +1,11 @@
 import { createKey, getAllStreamlinedComments } from "../handlers/comments";
 import { Context } from "../types";
 import { IssueComments, FetchParams, Issue, LinkedIssues, LinkedPullsToIssue, ReviewComments, SimplifiedComment } from "../types/github-types";
-import { StreamlinedComment } from "../types/llm";
+import { StreamlinedComment, TokenLimits } from "../types/llm";
 import { logger } from "./errors";
 import { dedupeStreamlinedComments, fetchCodeLinkedFromIssue, idIssueFromComment, mergeStreamlinedComments, splitKey } from "./issue";
 import { handleIssue, handleSpec, handleSpecAndBodyKeys, throttlePromises } from "./issue-handling";
+import { processPullRequestDiff } from "./pull-request-parsing";
 
 /**
  * Recursively fetches linked issues and processes them, including fetching comments and specifications.
@@ -56,12 +57,13 @@ export async function fetchLinkedIssues(params: FetchParams) {
   for (const comment of comments) {
     const foundIssues = idIssueFromComment(comment.body, params);
     const foundCodes = comment.body ? await fetchCodeLinkedFromIssue(comment.body, params.context, comment.issueUrl) : [];
+
     if (foundIssues) {
       for (const linkedIssue of foundIssues) {
         const linkedKey = createKey(linkedIssue.url, linkedIssue.issueNumber);
         if (seen.has(linkedKey)) continue;
-
         seen.add(linkedKey);
+
         const { comments: fetchedComments, issue: fetchedIssue } = await fetchIssueComments({
           context: params.context,
           issueNum: linkedIssue.issueNumber,
@@ -125,22 +127,25 @@ export async function mergeCommentsAndFetchSpec(
   }
 }
 
-export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number) {
+export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number, tokenLimits: TokenLimits) {
   const { octokit } = context;
+  let diff: string;
 
   try {
-    const diff = await octokit.pulls.get({
+    const diffResponse = await octokit.pulls.get({
       owner: org,
       repo,
       pull_number: issue,
-      mediaType: {
-        format: "diff",
-      },
+      mediaType: { format: "diff" },
     });
-    return diff.data as unknown as string;
+
+    diff = diffResponse.data as unknown as string;
   } catch (e) {
-    return null;
+    logger.error(`Error fetching PR data`, { owner: org, repo, issue, err: String(e) });
+    return { diff: null };
   }
+
+  return await processPullRequestDiff(diff, tokenLimits);
 }
 
 /**

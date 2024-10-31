@@ -85,9 +85,7 @@ export const handlers = [
       db.pull.findFirst({ where: { owner: { equals: owner as string }, repo: { equals: repo as string }, number: { equals: Number(pullNumber) } } })
     )
   ),
-  http.get("https://api.github.com/repos/:owner/:repo/languages", ({ params: { owner, repo } }) =>
-    HttpResponse.json(db.repo.findFirst({ where: { owner: { login: { equals: owner as string } }, name: { equals: repo as string } } }))
-  ),
+  http.get("https://api.github.com/repos/:owner/:repo/languages", () => HttpResponse.json(["JavaScript", "TypeScript", "Python"])),
   http.get("https://api.github.com/repos/:owner/:repo/contents/:path", () =>
     HttpResponse.json({
       type: "file",
@@ -96,5 +94,20 @@ export const handlers = [
       name: "README.md",
       content: Buffer.from(JSON.stringify({ content: "This is a mock README file" })).toString("base64"),
     })
+  ),
+  // [MSW] Warning: intercepted a request without a matching request handler:
+
+  // • GET https://api.github.com/repos/ubiquity/test-repo/pulls/3/files?per_page=100?per_page=100
+  http.get("https://api.github.com/repos/:owner/:repo/pulls/:pull_number/files", () =>
+    HttpResponse.json([
+      {
+        sha: "abc123",
+        filename: "file1.txt",
+        status: "modified",
+        additions: 10,
+        deletions: 5,
+        changes: 15,
+      },
+    ])
   ),
 ];

@@ -51,3 +51,10 @@ export type StreamlinedComments = {
   org: string;
   comments: StreamlinedComment[];
 };
+
+export type TokenLimits = {
+  modelMaxTokenLimit: number;
+  maxCompletionTokens: number;
+  runningTokenCount: number;
+  tokensRemaining: number;
+};

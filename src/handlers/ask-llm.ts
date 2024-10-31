@@ -25,7 +25,7 @@ export async function askQuestion(context: Context, question: string) {
     repo: context.payload.repository.name,
   });
   const formattedChat = await formatChatHistory(context, streamlinedComments, specAndBodies);
-  logger.info(`${formattedChat.join("")}`);
+  // logger.info(`${formattedChat.join("")}`);
   return await askLlm(context, question, formattedChat);
 }
 

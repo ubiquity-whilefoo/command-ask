@@ -83,7 +83,7 @@ export class Completions extends SuperOpenAi {
       additionalContext.join("\n"),
     ].join("\n");
 
-    logger.info(`System message: ${sysMsg}`);
+    // logger.info(`System message: ${sysMsg}`);
     logger.info(`Query: ${query}`);
 
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({

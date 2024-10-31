@@ -39,6 +39,23 @@ type Comment = {
 const octokit = jest.requireActual("@octokit/rest");
 jest.requireActual("openai");
 
+// extractDependencies
+
+jest.mock("../src/handlers/ground-truths/chat-bot", () => {
+  return {
+    fetchRepoDependencies: jest.fn().mockReturnValue({
+      dependencies: {},
+      devDependencies: {},
+    }),
+    extractDependencies: jest.fn(),
+    // [string, number][]
+    fetchRepoLanguageStats: jest.fn().mockReturnValue([
+      ["JavaScript", 100],
+      ["TypeScript", 200],
+    ]),
+  };
+});
+
 beforeAll(() => {
   server.listen();
 });
@@ -388,6 +405,12 @@ function createContext(body = TEST_SLASH_COMMAND) {
       },
       openai: {
         completions: {
+          getModelMaxTokenLimit: () => {
+            return 50000;
+          },
+          getModelMaxOutputLimit: () => {
+            return 50000;
+          },
           createCompletion: async (): Promise<CompletionsType> => {
             return {
               answer: MOCK_ANSWER,

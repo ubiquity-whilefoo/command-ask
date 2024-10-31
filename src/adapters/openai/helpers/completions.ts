@@ -23,6 +23,42 @@ export class Completions extends SuperOpenAi {
     this.context = context;
   }
 
+  getModelMaxTokenLimit(model: string): number {
+    // could be made more robust, unfortunately, there's no endpoint to get the model token limit
+    const tokenLimits = new Map<string, number>([
+      ["o1-mini", 128_000],
+      ["o1-preview", 128_000],
+      ["gpt-4-turbo", 128_000],
+      ["gpt-4o", 128_000],
+      ["gpt-4o-mini", 128_000],
+      ["gpt-4", 8_192],
+      ["gpt-3.5-turbo-0125", 16_385],
+      ["gpt-3.5-turbo", 16_385],
+    ]);
+
+    return tokenLimits.get(model) || 128_000;
+  }
+
+  getModelMaxOutputLimit(model: string): number {
+    // could be made more robust, unfortunately, there's no endpoint to get the model token limit
+    const tokenLimits = new Map<string, number>([
+      ["o1-mini", 65_536],
+      ["o1-preview", 32_768],
+      ["gpt-4-turbo", 4_096],
+      ["gpt-4o-mini", 16_384],
+      ["gpt-4o", 16_384],
+      ["gpt-4", 8_192],
+      ["gpt-3.5-turbo-0125", 4_096],
+      ["gpt-3.5-turbo", 4_096],
+    ]);
+
+    return tokenLimits.get(model) || 16_384;
+  }
+
+  async getModelTokenLimit(): Promise<number> {
+    return this.getModelMaxTokenLimit("o1-mini");
+  }
+
   async createCompletion(
     query: string,
     model: string = "o1-mini",
@@ -81,6 +117,7 @@ export class Completions extends SuperOpenAi {
         type: "text",
       },
     });
+
     const answer = res.choices[0].message;
     if (answer && answer.content && res.usage) {
       return {
@@ -128,6 +165,6 @@ export class Completions extends SuperOpenAi {
   }
 
   async findTokenLength(prompt: string, additionalContext: string[] = [], localContext: string[] = [], groundTruths: string[] = []): Promise<number> {
-    return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n")).length;
+    return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n"), { disallowedSpecial: new Set() }).length;
   }
 }

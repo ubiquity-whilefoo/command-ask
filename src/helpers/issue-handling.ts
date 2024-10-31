@@ -42,7 +42,7 @@ export async function handleSpec(
   streamlinedComments: Record<string, StreamlinedComment[]>
 ) {
   specAndBodies[key] = specOrBody;
-  const otherReferences = idIssueFromComment(specOrBody);
+  const otherReferences = idIssueFromComment(specOrBody, params);
   if (otherReferences) {
     for (const ref of otherReferences) {
       const anotherKey = createKey(ref.url, ref.issueNumber);
@@ -87,7 +87,7 @@ export async function handleComment(
   streamlinedComments: Record<string, StreamlinedComment[]>,
   seen: Set<string>
 ) {
-  const otherReferences = idIssueFromComment(comment.body);
+  const otherReferences = idIssueFromComment(comment.body, params);
   if (otherReferences) {
     for (const ref of otherReferences) {
       const key = createKey(ref.url);

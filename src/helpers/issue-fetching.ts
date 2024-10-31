@@ -1,4 +1,3 @@
-import { GithubDiff } from "github-diff-tool";
 import { createKey, getAllStreamlinedComments } from "../handlers/comments";
 import { Context } from "../types";
 import { IssueComments, FetchParams, Issue, LinkedIssues, LinkedPullsToIssue, ReviewComments, SimplifiedComment } from "../types/github-types";
@@ -84,7 +83,7 @@ export async function fetchLinkedIssues(params: FetchParams) {
   }
 
   for (const comment of comments) {
-    const foundIssues = idIssueFromComment(comment.body);
+    const foundIssues = idIssueFromComment(comment.body, params);
     const foundCodes = comment.body ? await fetchCodeLinkedFromIssue(comment.body, params.context, comment.issueUrl) : [];
     if (foundIssues) {
       for (const linkedIssue of foundIssues) {
@@ -149,57 +148,26 @@ export async function mergeCommentsAndFetchSpec(
     const merged = mergeStreamlinedComments(streamlinedComments, streamed);
     streamlinedComments = { ...streamlinedComments, ...merged };
   }
+
   if (linkedIssue.body) {
     await handleSpec(params, linkedIssue.body, specOrBodies, createKey(linkedIssue.url, linkedIssue.issueNumber), seen, streamlinedComments);
   }
 }
 
-/**
- * Fetches the diff of a pull request.
- *
- * @param context - The context containing the octokit instance and logger.
- * @param org - The organization or owner of the repository.
- * @param repo - The name of the repository.
- * @param issue - The pull request number.
- * @returns A promise that resolves to the diff of the pull request as a string, or null if an error occurs.
- */
-export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number): Promise<{ diff: string; diffSize: number }[] | null> {
-  const { octokit, logger } = context;
+export async function fetchPullRequestDiff(context: Context, org: string, repo: string, issue: number) {
+  const { octokit } = context;
+
   try {
-    const githubDiff = new GithubDiff(octokit);
-    //Fetch the statistics of the pull request
-    const stats = await githubDiff.getPullRequestStats(org, repo, issue);
-    const files = stats.map((file) => ({ filename: file.filename, diffSizeInBytes: file.diffSizeInBytes }));
-    //Fetch the diff of the files
-    const prDiffs = await Promise.all(
-      files.map(async (file) => {
-        let diff = null;
-        try {
-          diff = await githubDiff.getPullRequestDiff({
-            owner: org,
-            repo,
-            pullNumber: issue,
-            filePath: file.filename,
-          });
-        } catch {
-          logger.error(`Error fetching pull request diff for the file`, {
-            owner: org,
-            repo,
-            pull_number: issue,
-            file: file.filename,
-          });
-        }
-        return diff ? { diff: file.filename + diff, diffSize: file.diffSizeInBytes } : null;
-      })
-    );
-    return prDiffs.filter((diff): diff is { diff: string; diffSize: number } => diff !== null).sort((a, b) => a.diffSize - b.diffSize);
-  } catch (error) {
-    logger.error(`Error fetching pull request diff`, {
-      err: error,
+    const diff = await octokit.pulls.get({
       owner: org,
       repo,
       pull_number: issue,
+      mediaType: {
+        format: "diff",
+      },
     });
+    return diff.data as unknown as string;
+  } catch (e) {
     return null;
   }
 }
@@ -315,14 +283,14 @@ function castCommentsToSimplifiedComments(comments: (IssueComments | ReviewComme
         };
       }
 
-      if ("issue_url" in comment) {
+      if ("html_url" in comment) {
         return {
           body: comment.body,
           user: comment.user,
           id: comment.id.toString(),
           org: params.owner || params.context.payload.repository.owner.login,
           repo: params.repo || params.context.payload.repository.name,
-          issueUrl: comment.issue_url,
+          issueUrl: comment.html_url,
         };
       }
 

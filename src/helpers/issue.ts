@@ -76,6 +76,10 @@ export function idIssueFromComment(comment?: string | null, params?: FetchParams
   if (hashMatch && hashMatch.length > 0) {
     hashMatch.forEach((hash) => {
       const issueNumber = hash.replace("#", "");
+      // the HTML comment in the PR template
+      if (issueNumber === "1234" && comment?.includes("You must link the issue number e.g.")) {
+        return;
+      }
       const owner = params?.context.payload.repository?.owner?.login || "";
       const repo = params?.context.payload.repository?.name || "";
       response.push({ body: undefined, owner, repo, issueNumber: parseInt(issueNumber), url: `https://github.com/${owner}/${repo}/issues/${issueNumber}` });

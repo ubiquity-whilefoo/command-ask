@@ -2,7 +2,7 @@ import { Context } from "../types";
 import { StreamlinedComment, StreamlinedComments } from "../types/llm";
 import { createKey, streamlineComments } from "../handlers/comments";
 import { fetchPullRequestDiff, fetchIssue, fetchIssueComments } from "./issue-fetching";
-import { splitKey } from "./issue";
+import { pullReadmeFromRepoForIssue, splitKey } from "./issue";
 
 export async function formatChatHistory(
   context: Context,
@@ -76,7 +76,6 @@ async function createContextBlockSection({
   currentContextTokenCount: number;
 }): Promise<[number, string]> {
   let comments = streamlined[key];
-
   if (!comments || comments.length === 0) {
     const [owner, repo, number] = splitKey(key);
     const { comments: fetchedComments } = await fetchIssueComments({
@@ -85,6 +84,7 @@ async function createContextBlockSection({
       repo,
       issueNum: parseInt(number),
     });
+
     comments = streamlineComments(fetchedComments)[key];
   }
 
@@ -119,7 +119,17 @@ async function createContextBlockSection({
   if (commentSection) {
     block = [specBlock.join(""), createHeader(blockHeader, key), commentSection, specOrBody, createFooter(blockHeader, key)];
   } else {
+    // in this scenario we have no task/PR conversation, just the spec
     block = [specBlock.join("")];
+  }
+
+  // only inject the README if this is the current issue as that's likely most relevant
+  if (isCurrentIssue) {
+    const readme = await pullReadmeFromRepoForIssue({ context, owner: org, repo });
+    if (readme) {
+      const readmeBlock = readme ? [createHeader("README", key), createSpecOrBody(readme), createFooter("README", key)] : [];
+      block = block.concat(readmeBlock);
+    }
   }
 
   if (!prDiff) {
@@ -155,6 +165,7 @@ function createComment(comment: StreamlinedComments, specOrBody: string) {
   });
 
   const formattedComments = comment.comments.map((c) => `${c.id} ${c.user}: ${c.body}\n`);
+
 
   if (formattedComments.length === 0) {
     return;

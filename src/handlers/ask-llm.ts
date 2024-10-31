@@ -62,8 +62,27 @@ export async function askLlm(context: Context, question: string, formattedChat: 
 
     const rerankedText = similarText.length > 0 ? await reranker.reRankResults(similarText, question) : [];
     const [languages, { dependencies, devDependencies }] = await Promise.all([fetchRepoLanguageStats(context), fetchRepoDependencies(context)]);
-    const groundTruths = await findGroundTruths(context, "chat-bot", { languages, dependencies, devDependencies });
-    return completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
+
+    let groundTruths: string[] = [];
+
+    if (!languages.length) {
+      groundTruths.push("No languages found in the repository");
+    }
+
+    if (!Reflect.ownKeys(dependencies).length) {
+      groundTruths.push("No dependencies found in the repository");
+    }
+
+    if (!Reflect.ownKeys(devDependencies).length) {
+      groundTruths.push("No devDependencies found in the repository");
+    }
+
+    if (groundTruths.length === 3) {
+      return await completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
+    }
+
+    groundTruths = await findGroundTruths(context, "chat-bot", { languages, dependencies, devDependencies });
+    return await completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
   } catch (error) {
     throw bubbleUpErrorComment(context, error, false);
   }

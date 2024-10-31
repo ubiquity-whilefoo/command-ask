@@ -83,7 +83,7 @@ export class Completions extends SuperOpenAi {
       additionalContext.join("\n"),
     ].join("\n");
 
-    // logger.info(`System message: ${sysMsg}`);
+    logger.info(`System message: ${sysMsg}`);
     logger.info(`Query: ${query}`);
 
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({
@@ -165,6 +165,7 @@ export class Completions extends SuperOpenAi {
   }
 
   async findTokenLength(prompt: string, additionalContext: string[] = [], localContext: string[] = [], groundTruths: string[] = []): Promise<number> {
+    // disallowedSpecial: new Set() because we pass the entire diff as the prompt we should account for all special characters
     return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n"), { disallowedSpecial: new Set() }).length;
   }
 }

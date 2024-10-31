@@ -10,6 +10,7 @@ export async function formatChatHistory(
   streamlined: Record<string, StreamlinedComment[]>,
   specAndBodies: Record<string, string>
 ): Promise<string[]> {
+  // At this point really we should have all the context we can obtain but we try again just in case
   const keys = new Set([...Object.keys(streamlined), ...Object.keys(specAndBodies), createKey(context.payload.issue.html_url)]);
   const tokenLimits: TokenLimits = {
     modelMaxTokenLimit: context.adapters.openai.completions.getModelMaxTokenLimit(context.config.model),
@@ -18,11 +19,14 @@ export async function formatChatHistory(
     tokensRemaining: 0,
   };
 
-  // minus the output tokens we have this many tokens to use
+  // what we start out with
   tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens;
 
+  // careful adding any more API calls here as it's likely to hit the secondary rate limit
   const chatHistory = await Promise.all(
+    // keys are owner/repo/issueNum; so for each issue, we want to create a block
     Array.from(keys).map(async (key, i) => {
+      // if we run out of tokens, we should stop
       if (tokenLimits.tokensRemaining < 0) {
         logger.error(`Ran out of tokens at block ${i}`);
         return "";
@@ -35,6 +39,7 @@ export async function formatChatHistory(
         isCurrentIssue: key === createKey(context.payload.issue.html_url),
         tokenLimits,
       });
+      // update the token count
       tokenLimits.runningTokenCount = currentTokenCount;
       tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens - currentTokenCount;
       return result;
@@ -44,6 +49,7 @@ export async function formatChatHistory(
   return Array.from(new Set(chatHistory)).filter((x): x is string => !!x);
 }
 
+// These give structure and provide the distinction between the different sections of the chat history
 function getCorrectHeaderString(prDiff: string | null, isCurrentIssue: boolean, isConvo: boolean) {
   const strings = {
     convo: {
@@ -90,7 +96,8 @@ async function createContextBlockSection({
   tokenLimits: TokenLimits;
 }): Promise<[number, string]> {
   let comments = streamlined[key];
-  if (!comments || comments.length === 0) {
+  // just in case we try again but we should already have the comments
+  if (!comments || !comments.length) {
     const [owner, repo, number] = splitKey(key);
     const { comments: fetchedComments } = await fetchIssueComments({
       context,
@@ -98,7 +105,6 @@ async function createContextBlockSection({
       repo,
       issueNum: parseInt(number),
     });
-
     comments = streamlineComments(fetchedComments)[key];
   }
 
@@ -108,8 +114,11 @@ async function createContextBlockSection({
     throw context.logger.error("Issue number is not valid");
   }
 
+  // Fetch our diff if we have one; this excludes the largest of files to keep within token limits
   const { diff } = await fetchPullRequestDiff(context, org, repo, issueNumber, tokenLimits);
+  // specification or pull request body
   let specOrBody = specAndBodies[key];
+  // we should have it already but just in case
   if (!specOrBody) {
     specOrBody =
       (
@@ -122,23 +131,27 @@ async function createContextBlockSection({
       )?.body || "No specification or body available";
   }
 
-  const specHeader = getCorrectHeaderString(diff, isCurrentIssue, false);
-  const blockHeader = getCorrectHeaderString(diff, isCurrentIssue, true);
+  const specHeader = getCorrectHeaderString(diff, isCurrentIssue, false); //E.g:  === Current Task Specification ===
+  const blockHeader = getCorrectHeaderString(diff, isCurrentIssue, true); //E.g:  === Linked Task Conversation ===
 
+  // contains the actual spec or body
   const specBlock = [createHeader(specHeader, key), createSpecOrBody(specOrBody), createFooter(specHeader, key)];
+  // contains the conversation
   const commentSection = createComment({ issueNumber, repo, org, comments }, specOrBody);
 
   let block;
+  // if we have a conversation, we should include it
   if (commentSection) {
     block = [specBlock.join("\n"), createHeader(blockHeader, key), commentSection, createFooter(blockHeader, key)];
   } else {
-    // in this scenario we have no task/PR conversation, just the spec
+    // No need for empty sections in the chat history
     block = [specBlock.join("\n")];
   }
 
   // only inject the README if this is the current issue as that's likely most relevant
   if (isCurrentIssue) {
     const readme = await pullReadmeFromRepoForIssue({ context, owner: org, repo });
+    // give the readme it's own clear section
     if (readme) {
       const readmeBlock = readme ? [createHeader("README", key), createSpecOrBody(readme), createFooter("README", key)] : [];
       block = block.concat(readmeBlock);
@@ -146,24 +159,14 @@ async function createContextBlockSection({
   }
 
   if (!diff) {
+    // the diff was already encoded etc but we have added more to the block so we need to re-encode
     return [await context.adapters.openai.completions.findTokenLength(block.join("")), block.join("\n")];
   }
 
+  // Build the block with the diff in it's own section
   const blockWithDiff = [block.join("\n"), createHeader(`Pull Request Diff`, key), diff, createFooter(`Pull Request Diff`, key)];
   return [await context.adapters.openai.completions.findTokenLength(blockWithDiff.join("")), blockWithDiff.join("\n")];
 }
-
-/**
- * Might not need to splice from the formatted window
-function removeSections(fullText: string, header: string, footer: string): string {
-  const regex = new RegExp(`${escapeRegExp(header)}[\\s\\S]*?${escapeRegExp(footer)}`, 'g');
-  return fullText.replace(regex, '').trim();
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
- */
 
 function createHeader(content: string, repoString: string) {
   return `=== ${content} === ${repoString} ===\n`;
@@ -184,6 +187,7 @@ function createComment(comment: StreamlinedComments, specOrBody: string) {
 
   const seen = new Set<number>();
   comment.comments = comment.comments.filter((c) => {
+    // Do not include the same comment twice or the spec/body
     if (seen.has(c.id) || c.body === specOrBody) {
       return false;
     }

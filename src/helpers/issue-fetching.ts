@@ -7,28 +7,21 @@ import { dedupeStreamlinedComments, fetchCodeLinkedFromIssue, idIssueFromComment
 import { handleIssue, handleSpec, handleSpecAndBodyKeys, throttlePromises } from "./issue-handling";
 import { processPullRequestDiff } from "./pull-request-parsing";
 
-/**
- * Recursively fetches linked issues and processes them, including fetching comments and specifications.
- *
- * @param params - The parameters required to fetch the linked issues, including context and other details.
- * @returns A promise that resolves to an object containing linked issues, specifications, streamlined comments, and seen issue keys.
- */
 export async function recursivelyFetchLinkedIssues(params: FetchParams) {
+  // take a first run at gathering everything we need and package it up
   const { linkedIssues, seen, specAndBodies, streamlinedComments } = await fetchLinkedIssues(params);
+  // build promises and throttle them; this calls handleSpec which is a recursive function potentially to great depth
   const fetchPromises = linkedIssues.map(async (linkedIssue) => await mergeCommentsAndFetchSpec(params, linkedIssue, streamlinedComments, specAndBodies, seen));
   await throttlePromises(fetchPromises, 10);
+  // handle the keys that have been gathered
   const linkedIssuesKeys = linkedIssues.map((issue) => createKey(`${issue.owner}/${issue.repo}/${issue.issueNumber}`));
+  // exhaustive list of unique keys from the first full pass
   const specAndBodyKeys = Array.from(new Set([...Object.keys(specAndBodies), ...Object.keys(streamlinedComments), ...linkedIssuesKeys]));
+  // this fn throttles from within but again, be weary of the rate limit
   await handleSpecAndBodyKeys(specAndBodyKeys, params, dedupeStreamlinedComments(streamlinedComments), seen);
   return { linkedIssues, specAndBodies, streamlinedComments };
 }
 
-/**
- * Fetches linked issues recursively and processes them.
- *
- * @param params - The parameters required to fetch the linked issues, including context and other details.
- * @returns A promise that resolves to an object containing linked issues, specifications, streamlined comments, and seen issue keys.
- */
 export async function fetchLinkedIssues(params: FetchParams) {
   const { comments, issue } = await fetchIssueComments(params);
   if (!issue) {
@@ -100,15 +93,6 @@ export async function fetchLinkedIssues(params: FetchParams) {
   return { streamlinedComments, linkedIssues, specAndBodies, seen };
 }
 
-/**
- * Merges comments and fetches the specification for a linked issue.
- *
- * @param params - The parameters required to fetch the linked issue, including context and other details.
- * @param linkedIssue - The linked issue for which comments and specifications need to be fetched.
- * @param streamlinedComments - A record of streamlined comments associated with issues.
- * @param specOrBodies - A record of specifications or bodies associated with issues.
- * @param seen - A set of issue keys that have already been processed to avoid duplication.
- */
 export async function mergeCommentsAndFetchSpec(
   params: FetchParams,
   linkedIssue: LinkedIssues,
@@ -148,11 +132,6 @@ export async function fetchPullRequestDiff(context: Context, org: string, repo: 
   return await processPullRequestDiff(diff, tokenLimits);
 }
 
-/**
- * Fetches an issue from the GitHub API.
- * @param params - Context
- * @returns A promise that resolves to an issue object or null if an error occurs.
- */
 export async function fetchIssue(params: FetchParams): Promise<Issue | null> {
   const { octokit, payload, logger } = params.context;
   const { issueNum, owner, repo } = params;
@@ -227,15 +206,6 @@ export async function fetchIssueComments(params: FetchParams) {
   };
 }
 
-/**
- * Fetches and handles an issue based on the provided key and parameters.
- *
- * @param key - The unique key representing the issue in the format "owner/repo/issueNumber".
- * @param params - The parameters required to fetch the issue, including context and other details.
- * @param streamlinedComments - A record of streamlined comments associated with issues.
- * @param seen - A set of issue keys that have already been processed to avoid duplication.
- * @returns A promise that resolves to an array of streamlined comments for the specified issue.
- */
 export async function fetchAndHandleIssue(
   key: string,
   params: FetchParams,

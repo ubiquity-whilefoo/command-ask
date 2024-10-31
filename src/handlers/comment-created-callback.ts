@@ -35,6 +35,7 @@ export async function issueCommentCreatedCallback(
     }
 
     const metadataString = createStructuredMetadata(
+      // don't change this header, it's used for tracking
       "ubiquity-os-llm-response",
       logger.info(`Answer: ${answer}`, {
         metadata: {

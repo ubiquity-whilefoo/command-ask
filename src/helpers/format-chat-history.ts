@@ -182,7 +182,7 @@ function createSpecOrBody(specOrBody: string) {
 
 function createComment(comment: StreamlinedComments, specOrBody: string) {
   if (!comment.comments) {
-    return "";
+    return null;
   }
 
   const seen = new Set<number>();

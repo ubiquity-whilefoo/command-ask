@@ -1,6 +1,6 @@
 import { createKey, getAllStreamlinedComments } from "../handlers/comments";
 import { Context } from "../types";
-import { IssueComments, FetchParams, Issue, LinkedIssues, LinkedPullsToIssue, ReviewComments, SimplifiedComment } from "../types/github-types";
+import { IssueComments, FetchParams, Issue, LinkedIssues, ReviewComments, SimplifiedComment } from "../types/github-types";
 import { StreamlinedComment, TokenLimits } from "../types/llm";
 import { logger } from "./errors";
 import { dedupeStreamlinedComments, fetchCodeLinkedFromIssue, idIssueFromComment, mergeStreamlinedComments, splitKey } from "./issue";
@@ -23,8 +23,8 @@ export async function recursivelyFetchLinkedIssues(params: FetchParams) {
 }
 
 export async function fetchLinkedIssues(params: FetchParams) {
-  const { comments, issue } = await fetchIssueComments(params);
-  if (!issue) {
+  const fetchedIssueAndComments = await fetchIssueComments(params);
+  if (!fetchedIssueAndComments.issue) {
     return { streamlinedComments: {}, linkedIssues: [], specAndBodies: {}, seen: new Set<string>() };
   }
 
@@ -32,14 +32,17 @@ export async function fetchLinkedIssues(params: FetchParams) {
     throw logger.error("Owner or repo not found");
   }
 
+  const issue = fetchedIssueAndComments.issue;
+  const comments = fetchedIssueAndComments.comments.filter((comment) => comment.body !== undefined);
+
   const issueKey = createKey(issue.html_url);
   const [owner, repo, issueNumber] = splitKey(issueKey);
-  const linkedIssues: LinkedIssues[] = [{ body: issue.body || "", comments, issueNumber: parseInt(issueNumber), owner, repo, url: issue.html_url }];
+  const linkedIssues: LinkedIssues[] = [{ body: issue.body, comments, issueNumber: parseInt(issueNumber), owner, repo, url: issue.html_url }];
   const specAndBodies: Record<string, string> = {};
   const seen = new Set<string>([issueKey]);
 
   comments.push({
-    body: issue.body || "",
+    body: issue.body,
     user: issue.user,
     id: issue.id.toString(),
     org: params.owner,

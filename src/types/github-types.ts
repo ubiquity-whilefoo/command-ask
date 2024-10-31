@@ -19,12 +19,12 @@ export type LinkedIssues = {
   owner: string;
   url: string;
   comments?: SimplifiedComment[] | null | undefined;
-  body: string | undefined;
+  body: string | undefined | null;
 };
 
 export type SimplifiedComment = {
   user: Partial<User> | null;
-  body: string | undefined;
+  body: string | undefined | null;
   id: string;
   org: string;
   repo: string;
@@ -47,14 +47,4 @@ export type FetchedPulls = {
   state: string;
   merged: boolean;
   url: string;
-};
-
-export type LinkedPullsToIssue = {
-  repository: {
-    issue: {
-      closedByPullRequestsReferences: {
-        nodes: FetchedPulls[];
-      };
-    };
-  };
 };

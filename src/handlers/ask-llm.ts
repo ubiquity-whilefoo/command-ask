@@ -51,21 +51,18 @@ export async function askGpt(context: Context, question: string, formattedChat: 
   try {
     const [similarComments, similarIssues] = await Promise.all([
       comment.findSimilarComments(question, 1 - similarityThreshold, ""),
-      issue.findSimilarIssues(question, 1 - similarityThreshold, "")
+      issue.findSimilarIssues(question, 1 - similarityThreshold, ""),
     ]);
 
     const similarText = [
-      ...similarComments?.map((comment: CommentSimilaritySearchResult) => comment.comment_plaintext) || [],
-      ...similarIssues?.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext) || []
+      ...(similarComments?.map((comment: CommentSimilaritySearchResult) => comment.comment_plaintext) || []),
+      ...(similarIssues?.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext) || []),
     ];
 
-    formattedChat = formattedChat.filter(text => text);
+    formattedChat = formattedChat.filter((text) => text);
 
     const rerankedText = similarText.length > 0 ? await reranker.reRankResults(similarText, question) : [];
-    const [languages, { dependencies, devDependencies }] = await Promise.all([
-      fetchRepoLanguageStats(context),
-      fetchRepoDependencies(context)
-    ]);
+    const [languages, { dependencies, devDependencies }] = await Promise.all([fetchRepoLanguageStats(context), fetchRepoDependencies(context)]);
 
     const groundTruths = await findGroundTruths(context, "chat-bot", { languages, dependencies, devDependencies });
 

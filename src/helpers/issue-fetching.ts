@@ -41,21 +41,19 @@ export async function fetchLinkedIssues(params: FetchParams) {
   if (!issue) {
     return { streamlinedComments: {}, linkedIssues: [], specAndBodies: {}, seen: new Set<string>() };
   }
-  if (!issue.body || !issue.html_url) {
-    throw logger.error("Issue body or URL not found", { issueUrl: issue.html_url });
-  }
 
   if (!params.owner || !params.repo) {
     throw logger.error("Owner or repo not found");
   }
+
   const issueKey = createKey(issue.html_url);
   const [owner, repo, issueNumber] = splitKey(issueKey);
-  const linkedIssues: LinkedIssues[] = [{ body: issue.body, comments, issueNumber: parseInt(issueNumber), owner, repo, url: issue.html_url }];
+  const linkedIssues: LinkedIssues[] = [{ body: issue.body || "", comments, issueNumber: parseInt(issueNumber), owner, repo, url: issue.html_url }];
   const specAndBodies: Record<string, string> = {};
   const seen = new Set<string>([issueKey]);
 
   comments.push({
-    body: issue.body,
+    body: issue.body || "",
     user: issue.user,
     id: issue.id.toString(),
     org: params.owner,

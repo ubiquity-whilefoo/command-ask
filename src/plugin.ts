@@ -1,13 +1,13 @@
 import { Octokit } from "@octokit/rest";
 import { PluginInputs } from "./types";
 import { Context } from "./types";
-import { LogLevel, Logs } from "@ubiquity-os/ubiquity-os-logger";
 import { Env } from "./types/env";
 import { createAdapters } from "./adapters";
 import { createClient } from "@supabase/supabase-js";
 import { VoyageAIClient } from "voyageai";
 import OpenAI from "openai";
 import { proxyCallbacks } from "./helpers/callback-proxy";
+import { logger } from "./helpers/errors";
 
 export async function plugin(inputs: PluginInputs, env: Env) {
   const octokit = new Octokit({ auth: inputs.authToken });
@@ -26,7 +26,7 @@ export async function plugin(inputs: PluginInputs, env: Env) {
     config: inputs.settings,
     octokit,
     env,
-    logger: new Logs("info" as LogLevel),
+    logger,
     adapters: {} as ReturnType<typeof createAdapters>,
   };
   context.adapters = createAdapters(supabase, voyageClient, openaiClient, context);

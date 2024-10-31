@@ -6,7 +6,7 @@ import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
-import { bubbleUpErrorComment } from "../helpers/errors";
+import { bubbleUpErrorComment, logger } from "../helpers/errors";
 
 /**
  * Asks a question to GPT and returns the response
@@ -25,6 +25,7 @@ export async function askQuestion(context: Context, question: string) {
     repo: context.payload.repository.name,
   });
   const formattedChat = await formatChatHistory(context, streamlinedComments, specAndBodies);
+  logger.info(`${formattedChat.join("")}`);
   return await askLlm(context, question, formattedChat);
 }
 

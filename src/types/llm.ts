@@ -4,8 +4,8 @@ export type ModelApplications = "code-review" | "chat-bot";
 
 type ChatBotAppParams = {
   languages: [string, number][];
-  dependencies: Record<string, string>;
-  devDependencies: Record<string, string>;
+  dependencies: Record<string, string> | null;
+  devDependencies: Record<string, string> | null;
 };
 
 type CodeReviewAppParams = {
@@ -50,4 +50,11 @@ export type StreamlinedComments = {
   repo: string;
   org: string;
   comments: StreamlinedComment[];
+};
+
+export type TokenLimits = {
+  modelMaxTokenLimit: number;
+  maxCompletionTokens: number;
+  runningTokenCount: number;
+  tokensRemaining: number;
 };

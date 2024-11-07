@@ -68,6 +68,7 @@ export async function fetchRepoLanguageStats(context: Context) {
 
     return Array.from(Object.entries(stats)).sort((a, b) => b[1] - a[1]);
   } catch (err) {
-    throw logger.error(`Error fetching language stats for ${owner}/${repo}`, { err });
+    logger.error(`Error fetching language stats for ${owner}/${repo}`, { err });
+    return [];
   }
 }

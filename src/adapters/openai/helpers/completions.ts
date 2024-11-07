@@ -3,6 +3,7 @@ import { Context } from "../../../types";
 import { SuperOpenAi } from "./openai";
 import { CompletionsModelHelper, ModelApplications } from "../../../types/llm";
 import { encode } from "gpt-tokenizer";
+import { logger } from "../../../helpers/errors";
 
 export interface CompletionsType {
   answer: string;
@@ -22,8 +23,44 @@ export class Completions extends SuperOpenAi {
     this.context = context;
   }
 
+  getModelMaxTokenLimit(model: string): number {
+    // could be made more robust, unfortunately, there's no endpoint to get the model token limit
+    const tokenLimits = new Map<string, number>([
+      ["o1-mini", 128_000],
+      ["o1-preview", 128_000],
+      ["gpt-4-turbo", 128_000],
+      ["gpt-4o", 128_000],
+      ["gpt-4o-mini", 128_000],
+      ["gpt-4", 8_192],
+      ["gpt-3.5-turbo-0125", 16_385],
+      ["gpt-3.5-turbo", 16_385],
+    ]);
+
+    return tokenLimits.get(model) || 128_000;
+  }
+
+  getModelMaxOutputLimit(model: string): number {
+    // could be made more robust, unfortunately, there's no endpoint to get the model token limit
+    const tokenLimits = new Map<string, number>([
+      ["o1-mini", 65_536],
+      ["o1-preview", 32_768],
+      ["gpt-4-turbo", 4_096],
+      ["gpt-4o-mini", 16_384],
+      ["gpt-4o", 16_384],
+      ["gpt-4", 8_192],
+      ["gpt-3.5-turbo-0125", 4_096],
+      ["gpt-3.5-turbo", 4_096],
+    ]);
+
+    return tokenLimits.get(model) || 16_384;
+  }
+
+  async getModelTokenLimit(): Promise<number> {
+    return this.getModelMaxTokenLimit("o1-mini");
+  }
+
   async createCompletion(
-    prompt: string,
+    query: string,
     model: string = "o1-mini",
     additionalContext: string[],
     localContext: string[],
@@ -31,6 +68,24 @@ export class Completions extends SuperOpenAi {
     botName: string,
     maxTokens: number
   ): Promise<CompletionsType> {
+    const numTokens = await this.findTokenLength(query, additionalContext, localContext, groundTruths);
+    logger.info(`Number of tokens: ${numTokens}`);
+
+    const sysMsg = [
+      "You Must obey the following ground truths: ",
+      JSON.stringify(groundTruths) + "\n",
+      "You are tasked with assisting as a GitHub bot by generating responses based on provided chat history and similar responses, focusing on using available knowledge within the provided corpus, which may contain code, documentation, or incomplete information. Your role is to interpret and use this knowledge effectively to answer user questions.\n\n# Steps\n\n1. **Understand Context**: Review the chat history and any similar provided responses to understand the context.\n2. **Extract Relevant Information**: Identify key pieces of information, even if they are incomplete, from the available corpus.\n3. **Apply Knowledge**: Use the extracted information and relevant documentation to construct an informed response.\n4. **Draft Response**: Compile the gathered insights into a coherent and concise response, ensuring it's clear and directly addresses the user's query.\n5. **Review and Refine**: Check for accuracy and completeness, filling any gaps with logical assumptions where necessary.\n\n# Output Format\n\n- Concise and coherent responses in paragraphs that directly address the user's question.\n- Incorporate inline code snippets or references from the documentation if relevant.\n\n# Examples\n\n**Example 1**\n\n*Input:*\n- Chat History: \"What was the original reason for moving the LP tokens?\"\n- Corpus Excerpts: \"It isn't clear to me if we redid the staking yet and if we should migrate. If so, perhaps we should make a new issue instead. We should investigate whether the missing LP tokens issue from the MasterChefV2.1 contract is critical to the decision of migrating or not.\"\n\n*Output:*\n\"It was due to missing LP tokens issue from the MasterChefV2.1 Contract.\n\n# Notes\n\n- Ensure the response is crafted from the corpus provided, without introducing information outside of what's available or relevant to the query.\n- Consider edge cases where the corpus might lack explicit answers, and justify responses with logical reasoning based on the existing information.",
+      `Your name is: ${botName}`,
+      "\n",
+      "Main Context (Provide additional precedence in terms of information): ",
+      localContext.join("\n"),
+      "Secondary Context: ",
+      additionalContext.join("\n"),
+    ].join("\n");
+
+    logger.info(`System message: ${sysMsg}`);
+    logger.info(`Query: ${query}`);
+
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({
       model: model,
       messages: [
@@ -39,18 +94,7 @@ export class Completions extends SuperOpenAi {
           content: [
             {
               type: "text",
-              text:
-                "You Must obey the following ground truths: [" +
-                groundTruths.join(":") +
-                "]\n" +
-                "You are tasked with assisting as a GitHub bot by generating responses based on provided chat history and similar responses, focusing on using available knowledge within the provided corpus, which may contain code, documentation, or incomplete information. Your role is to interpret and use this knowledge effectively to answer user questions.\n\n# Steps\n\n1. **Understand Context**: Review the chat history and any similar provided responses to understand the context.\n2. **Extract Relevant Information**: Identify key pieces of information, even if they are incomplete, from the available corpus.\n3. **Apply Knowledge**: Use the extracted information and relevant documentation to construct an informed response.\n4. **Draft Response**: Compile the gathered insights into a coherent and concise response, ensuring it's clear and directly addresses the user's query.\n5. **Review and Refine**: Check for accuracy and completeness, filling any gaps with logical assumptions where necessary.\n\n# Output Format\n\n- Concise and coherent responses in paragraphs that directly address the user's question.\n- Incorporate inline code snippets or references from the documentation if relevant.\n\n# Examples\n\n**Example 1**\n\n*Input:*\n- Chat History: \"What was the original reason for moving the LP tokens?\"\n- Corpus Excerpts: \"It isn't clear to me if we redid the staking yet and if we should migrate. If so, perhaps we should make a new issue instead. We should investigate whether the missing LP tokens issue from the MasterChefV2.1 contract is critical to the decision of migrating or not.\"\n\n*Output:*\n\"It was due to missing LP tokens issue from the MasterChefV2.1 Contract.\n\n# Notes\n\n- Ensure the response is crafted from the corpus provided, without introducing information outside of what's available or relevant to the query.\n- Consider edge cases where the corpus might lack explicit answers, and justify responses with logical reasoning based on the existing information." +
-                "Your name is : " +
-                botName +
-                "\n" +
-                "Main Context (Provide additional precedence in terms of information): " +
-                localContext.join("\n") +
-                "Secondary Context: " +
-                additionalContext.join("\n"),
+              text: sysMsg,
             },
           ],
         },
@@ -59,7 +103,7 @@ export class Completions extends SuperOpenAi {
           content: [
             {
               type: "text",
-              text: prompt,
+              text: query,
             },
           ],
         },
@@ -73,6 +117,7 @@ export class Completions extends SuperOpenAi {
         type: "text",
       },
     });
+
     const answer = res.choices[0].message;
     if (answer && answer.content && res.usage) {
       return {
@@ -120,6 +165,7 @@ export class Completions extends SuperOpenAi {
   }
 
   async findTokenLength(prompt: string, additionalContext: string[] = [], localContext: string[] = [], groundTruths: string[] = []): Promise<number> {
-    return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n")).length;
+    // disallowedSpecial: new Set() because we pass the entire diff as the prompt we should account for all special characters
+    return encode(prompt + additionalContext.join("\n") + localContext.join("\n") + groundTruths.join("\n"), { disallowedSpecial: new Set() }).length;
   }
 }

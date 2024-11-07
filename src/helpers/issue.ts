@@ -58,13 +58,31 @@ export function splitKey(key: string): [string, string, string] {
  * @param params - Additional parameters that may include context information.
  * @returns An array of linked issues or null if no issues are found.
  */
-export function idIssueFromComment(comment?: string | null): LinkedIssues[] | null {
-  const urlMatch = comment?.match(/https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+)\/(pull|issues?)\/(\d+)/g);
+export function idIssueFromComment(comment?: string | null, params?: FetchParams): LinkedIssues[] | null {
+  const urlMatch = comment?.match(/https:\/\/(?:www\.)?github.com\/([^/]+)\/([^/]+)\/(pull|issue|issues)\/(\d+)/g);
   const response: LinkedIssues[] = [];
 
   if (urlMatch) {
     urlMatch.forEach((url) => {
       response.push(createLinkedIssueOrPr(url));
+    });
+  }
+
+  /**
+   * These can only reference issues within the same repository
+   * so params works here
+   */
+  const hashMatch = comment?.match(/#(\d+)/g);
+  if (hashMatch && hashMatch.length > 0) {
+    hashMatch.forEach((hash) => {
+      const issueNumber = hash.replace("#", "");
+      // the HTML comment in the PR template
+      if (issueNumber === "1234" && comment?.includes("You must link the issue number e.g.")) {
+        return;
+      }
+      const owner = params?.context.payload.repository?.owner?.login || "";
+      const repo = params?.context.payload.repository?.name || "";
+      response.push({ body: undefined, owner, repo, issueNumber: parseInt(issueNumber), url: `https://github.com/${owner}/${repo}/issues/${issueNumber}` });
     });
   }
 
@@ -151,7 +169,7 @@ export async function fetchCodeLinkedFromIssue(
           return { body: content, id: parsedUrl.path };
         }
       } catch (error) {
-        console.error(`Error fetching content from ${url}:`, error);
+        logger.error(`Error fetching content from ${url}:`, { er: error });
       }
       return null;
     })

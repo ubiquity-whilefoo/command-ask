@@ -1,30 +1,25 @@
-import { Context, SupportedEvents } from "../types";
+import { Context } from "../types";
 import { addCommentToIssue } from "./add-comment";
 import { askQuestion } from "./ask-llm";
 import { CallbackResult } from "../types/proxy";
 import { bubbleUpErrorComment, sanitizeMetadata } from "../helpers/errors";
 import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
 
-export async function issueCommentCreatedCallback(
-  context: Context<"issue_comment.created", SupportedEvents["issue_comment.created"]>
-): Promise<CallbackResult> {
-  const {
-    logger,
-    env: { UBIQUITY_OS_APP_NAME },
-  } = context;
-  const question = context.payload.comment.body.trim();
-  const slugRegex = new RegExp(`^@${UBIQUITY_OS_APP_NAME}`, "i");
+export async function issueCommentCreatedCallback(context: Context<"issue_comment.created">): Promise<CallbackResult> {
+  const { logger, command, payload } = context;
+  let question = "";
 
-  if (!slugRegex.test(question)) {
-    return { status: 204, reason: logger.info("Comment does not mention the app. Skipping.").logMessage.raw };
+  if (payload.comment.user?.type === "Bot") {
+    throw logger.error("Comment is from a bot. Skipping.");
   }
 
-  if (!question.length || question.replace(slugRegex, "").trim().length === 0) {
-    return { status: 204, reason: logger.info("No question provided. Skipping.").logMessage.raw };
+  if (command?.name === "ask") {
+    question = command.parameters.question;
+  } else if (payload.comment.body.trim().startsWith("/ask")) {
+    question = payload.comment.body.trim().replace("/ask", "").trim();
   }
-
-  if (context.payload.comment.user?.type === "Bot") {
-    return { status: 204, reason: logger.info("Comment is from a bot. Skipping.").logMessage.raw };
+  if (!question) {
+    throw logger.error("No question provided");
   }
 
   try {

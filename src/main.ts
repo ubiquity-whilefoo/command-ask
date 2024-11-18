@@ -1,39 +1,24 @@
-import * as core from "@actions/core";
-import * as github from "@actions/github";
-import { Value } from "@sinclair/typebox/value";
-import { envSchema } from "./types/env";
-import { pluginSettingsSchema, PluginInputs, pluginSettingsValidator } from "./types";
+import { createActionsPlugin } from "@ubiquity-os/plugin-sdk";
+import { createAdapters } from "./adapters";
+import { SupportedEvents } from "./types/context";
+import { Env, envSchema } from "./types/env";
+import { PluginSettings, pluginSettingsSchema } from "./types/plugin-inputs";
+import { Command } from "./types/command";
 import { plugin } from "./plugin";
+import { LogLevel } from "@ubiquity-os/ubiquity-os-logger";
 
-/**
- * How a GitHub action executes the plugin.
- */
-export async function run() {
-  const payload = github.context.payload.inputs;
-  const env = Value.Decode(envSchema, process.env);
-  const settings = Value.Decode(pluginSettingsSchema, Value.Default(pluginSettingsSchema, JSON.parse(payload.settings)));
-
-  if (!pluginSettingsValidator.test(settings)) {
-    throw new Error("Invalid settings provided");
+createActionsPlugin<PluginSettings, Env, Command, SupportedEvents>(
+  (context) => {
+    return plugin({
+      ...context,
+      adapters: {} as ReturnType<typeof createAdapters>,
+    });
+  },
+  {
+    envSchema: envSchema,
+    postCommentOnError: true,
+    settingsSchema: pluginSettingsSchema,
+    logLevel: (process.env.LOG_LEVEL as LogLevel) ?? "info",
+    kernelPublicKey: process.env.KERNEL_PUBLIC_KEY,
   }
-
-  const inputs: PluginInputs = {
-    stateId: payload.stateId,
-    eventName: payload.eventName,
-    eventPayload: JSON.parse(payload.eventPayload),
-    settings,
-    authToken: payload.authToken,
-    ref: payload.ref,
-  };
-
-  await plugin(inputs, env);
-}
-
-run()
-  .then((result) => {
-    core.setOutput("result", result);
-  })
-  .catch((error) => {
-    console.error(error);
-    core.setFailed(error);
-  });
+).catch(console.error);

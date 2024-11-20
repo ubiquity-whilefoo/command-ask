@@ -3,12 +3,6 @@ import { Context } from "../types";
 import { addCommentToIssue } from "../handlers/add-comment";
 export const logger = new Logs("debug");
 
-export function handleUncaughtError(error: unknown) {
-  logger.error("An uncaught error occurred", { err: error });
-  const status = 500;
-  return new Response(JSON.stringify({ error }), { status: status, headers: { "content-type": "application/json" } });
-}
-
 export function sanitizeMetadata(obj: LogReturn["metadata"]): string {
   return JSON.stringify(obj, null, 2).replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/--/g, "&#45;&#45;");
 }

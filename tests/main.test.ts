@@ -1,7 +1,7 @@
 import { db } from "./__mocks__/db";
 import { server } from "./__mocks__/node";
 import usersGet from "./__mocks__/users-get.json";
-import { expect, describe, beforeAll, beforeEach, afterAll, afterEach, it } from "@jest/globals";
+import { expect, describe, beforeAll, beforeEach, afterAll, afterEach, it, jest } from "@jest/globals";
 import { Context, SupportedEvents } from "../src/types";
 import { drop } from "@mswjs/data";
 import issueTemplate from "./__mocks__/issue-template";
@@ -12,6 +12,7 @@ import { envSchema } from "../src/types/env";
 import { CompletionsType } from "../src/adapters/openai/helpers/completions";
 import { logger } from "../src/helpers/errors";
 import { issueCommentCreatedCallback } from "../src/handlers/comment-created-callback";
+import { Octokit } from "@octokit/rest";
 
 const TEST_QUESTION = "what is pi?";
 const LOG_CALLER = "_Logs.<anonymous>";
@@ -35,12 +36,9 @@ type Comment = {
   pull_request_url?: string;
 };
 
-const octokit = jest.requireActual("@octokit/rest");
-jest.requireActual("openai");
-
 // extractDependencies
 
-jest.mock("../src/handlers/ground-truths/chat-bot", () => {
+jest.unstable_mockModule("../src/handlers/ground-truths/chat-bot", () => {
   return {
     fetchRepoDependencies: jest.fn().mockReturnValue({
       dependencies: {},
@@ -408,7 +406,7 @@ function createContext(body = TEST_QUESTION) {
         },
       },
     },
-    octokit: new octokit.Octokit(),
+    octokit: new Octokit(),
     eventName: "issue_comment.created" as SupportedEvents,
   } as unknown as Context;
 }

@@ -3,9 +3,8 @@
   "description": "A highly context aware organization integrated chatbot",
   "ubiquity:listeners": ["issue_comment.created"],
   "skipBotEvents": true,
-  "commands": [
-    {
-      "name": "ask",
+  "commands": {
+    "ask": {
       "ubiquity:example": "/ask",
       "description": "Ask any question about the repository, issue or pull request",
       "parameters": {
@@ -18,5 +17,5 @@
         }
       }
     }
-  ]
+  }
 }

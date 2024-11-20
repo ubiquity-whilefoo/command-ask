@@ -6,12 +6,10 @@ import { Context, SupportedEvents } from "../src/types";
 import { drop } from "@mswjs/data";
 import issueTemplate from "./__mocks__/issue-template";
 import repoTemplate from "./__mocks__/repo-template";
-import { askQuestion } from "../src/handlers/ask-llm";
 import { TransformDecodeCheckError, Value } from "@sinclair/typebox/value";
 import { envSchema } from "../src/types/env";
 import { CompletionsType } from "../src/adapters/openai/helpers/completions";
 import { logger } from "../src/helpers/errors";
-import { issueCommentCreatedCallback } from "../src/handlers/comment-created-callback";
 import { Octokit } from "@octokit/rest";
 
 const TEST_QUESTION = "what is pi?";
@@ -73,6 +71,7 @@ describe("Ask plugin tests", () => {
   it("should ask GPT a question", async () => {
     const ctx = createContext(TEST_QUESTION);
     createComments([transformCommentTemplate(1, 1, TEST_QUESTION, "ubiquity", "test-repo", true)]);
+    const askQuestion = (await import("../src/handlers/ask-llm")).askQuestion;
     const res = await askQuestion(ctx, TEST_QUESTION);
 
     expect(res).toBeDefined();
@@ -95,6 +94,7 @@ describe("Ask plugin tests", () => {
       transformCommentTemplate(4, 3, "Just a comment", "ubiquity", "test-repo", true, "1"),
     ]);
 
+    const issueCommentCreatedCallback = (await import("../src/handlers/comment-created-callback")).issueCommentCreatedCallback;
     await issueCommentCreatedCallback(ctx);
     const prompt = `=== Current Task Specification === ubiquity/test-repo/1 ===
 

@@ -130,21 +130,10 @@ export class Completions extends SuperOpenAi {
   }
 
   async createGroundTruthCompletion<TApp extends ModelApplications>(
-    context: Context,
     groundTruthSource: string,
     systemMsg: string,
     model: CompletionsModelHelper<TApp>
   ): Promise<string | null> {
-    const {
-      env: { OPENAI_API_KEY },
-      config: { openAiBaseUrl },
-    } = context;
-
-    const openAi = new OpenAI({
-      apiKey: OPENAI_API_KEY,
-      ...(openAiBaseUrl && { baseURL: openAiBaseUrl }),
-    });
-
     const msgs = [
       {
         role: "system",
@@ -156,7 +145,7 @@ export class Completions extends SuperOpenAi {
       },
     ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
 
-    const res = await openAi.chat.completions.create({
+    const res = await this.client.chat.completions.create({
       messages: msgs,
       model: model,
     });

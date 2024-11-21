@@ -55,67 +55,63 @@ const baseContext: Partial<Context> = {
 };
 
 void (async () => {
-  try {
-    await Eval("Command Ask LLM", {
-      data: () =>
-        goldResponses.issueResponses.map((scenario) => ({
-          input: scenario,
-          expected: scenario.expectedResponse,
-        })),
-      task: async (scenario) => {
-        // Create initial context with temporary adapters placeholder
-        const context: Context = {
-          ...baseContext,
-          adapters: {} as ReturnType<typeof createAdapters>,
-          payload: {
-            issue: {
-              ...issueTemplate,
-              body: scenario.issue.body,
-              html_url: scenario.issue.html_url,
-              number: scenario.issue.number,
-            } as unknown as Context["payload"]["issue"],
-            sender: scenario.sender,
-            repository: {
-              name: scenario.repository.name,
-              owner: {
-                login: scenario.repository.owner.login,
-              },
+  await Eval("Command Ask LLM", {
+    data: () =>
+      goldResponses.issueResponses.map((scenario) => ({
+        input: scenario,
+        expected: scenario.expectedResponse,
+      })),
+    task: async (scenario) => {
+      // Create initial context with temporary adapters placeholder
+      const context: Context = {
+        ...baseContext,
+        adapters: {} as ReturnType<typeof createAdapters>,
+        payload: {
+          issue: {
+            ...issueTemplate,
+            body: scenario.issue.body,
+            html_url: scenario.issue.html_url,
+            number: scenario.issue.number,
+          } as unknown as Context["payload"]["issue"],
+          sender: scenario.sender,
+          repository: {
+            name: scenario.repository.name,
+            owner: {
+              login: scenario.repository.owner.login,
             },
-            comment: {
-              body: scenario.issue.question,
-              user: scenario.sender,
-            } as unknown as Context["payload"]["comment"],
-            action: "created" as string,
-            installation: { id: 1 } as unknown as Context["payload"]["installation"],
-            organization: { login: "ubiquity" } as unknown as Context["payload"]["organization"],
           },
-          eventName: "issue_comment.created",
-        } as Context;
+          comment: {
+            body: scenario.issue.question,
+            user: scenario.sender,
+          } as unknown as Context["payload"]["comment"],
+          action: "created" as string,
+          installation: { id: 1 } as unknown as Context["payload"]["installation"],
+          organization: { login: "ubiquity" } as unknown as Context["payload"]["organization"],
+        },
+        eventName: "issue_comment.created",
+      } as Context;
 
-        // Create adapters with the initial context
-        const adapters = createAdapters(supabase, voyageClient, openai, context);
+      // Create adapters with the initial context
+      const adapters = createAdapters(supabase, voyageClient, openai, context);
 
-        // Create a new context with the proper adapters
-        const finalContext: Context = {
-          ...context,
-          adapters,
-        };
+      // Create a new context with the proper adapters
+      const finalContext: Context = {
+        ...context,
+        adapters,
+      };
 
-        // Update the adapters' context reference
-        Object.values(adapters).forEach((adapterGroup) => {
-          Object.values(adapterGroup).forEach((adapter) => {
-            if (adapter && typeof adapter === "object" && "context" in adapter) {
-              adapter.context = finalContext;
-            }
-          });
+      // Update the adapters' context reference
+      Object.values(adapters).forEach((adapterGroup) => {
+        Object.values(adapterGroup).forEach((adapter) => {
+          if (adapter && typeof adapter === "object" && "context" in adapter) {
+            adapter.context = finalContext;
+          }
         });
+      });
 
-        const result = await askQuestion(finalContext, scenario.issue.question);
-        return result.answer;
-      },
-      scores: [Levenshtein],
-    });
-  } catch (error) {
-    console.error("Evaluation failed:", error);
-  }
+      const result = await askQuestion(finalContext, scenario.issue.question);
+      return result.answer;
+    },
+    scores: [Levenshtein],
+  });
 })();

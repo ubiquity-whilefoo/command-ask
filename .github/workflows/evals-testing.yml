@@ -4,7 +4,9 @@ on:
     workflow_dispatch:
     pull_request:
 
-permissions: write-all
+permissions:
+  pull-requests: write
+  contents: read
 
 jobs:
   eval:

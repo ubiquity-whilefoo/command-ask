@@ -13,7 +13,7 @@
     "format:lint": "eslint --fix .",
     "format:prettier": "prettier --write .",
     "format:cspell": "cspell **/*",
-    "eval": "braintrust eval evals",
+    "eval": "tsx evals/llm.eval.ts",
     "knip": "knip --config .github/knip.ts",
     "knip-ci": "knip --no-exit-code --reporter json --config .github/knip.ts",
     "prepare": "husky install",

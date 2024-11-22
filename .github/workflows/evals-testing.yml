@@ -29,7 +29,7 @@ jobs:
 
       - name: Run Evals
         id: evals
-        run: yarn tsx ./evals/llm.evals.ts
+        run: yarn eval
 
       - name: Add Evals Report to Github Comment
         if: always()

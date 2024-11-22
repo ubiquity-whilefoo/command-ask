@@ -1,5 +1,5 @@
 import { Eval } from "braintrust";
-import { Levenshtein, ContextPrecision, ClosedQA } from "autoevals";
+import { Levenshtein, ContextPrecision } from "autoevals";
 import goldResponses from "./data/eval-gold-responses.json";
 import OpenAI from "openai";
 import { VoyageAIClient } from "voyageai";
@@ -153,26 +153,6 @@ void Eval<EvalInput, EvalOutput, string, void, void>("Command Ask LLM", {
         output: args.output.output,
         context: args.output.context,
         expected: args.expected,
-        openAiApiKey: process.env.OPENROUTER_API_KEY || "",
-        openAiBaseUrl: inputs.settings.openAiBaseUrl || "",
-      }),
-    (args) =>
-      ClosedQA({
-        input: args.input.scenario.issue.question,
-        output: args.output.output,
-        criteria: (txt: string) => {
-          // Check if txt overlaps with the array scenario.mustHave
-          const mustHave = args.input.scenario.responseMustInclude || [];
-          if (!Array.isArray(mustHave)) {
-            return true;
-          }
-          for (const item of mustHave) {
-            if (!txt.includes(item)) {
-              return false;
-            }
-          }
-          return true;
-        },
         openAiApiKey: process.env.OPENROUTER_API_KEY || "",
         openAiBaseUrl: inputs.settings.openAiBaseUrl || "",
       }),

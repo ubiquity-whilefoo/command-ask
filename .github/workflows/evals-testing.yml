@@ -28,9 +28,10 @@ jobs:
         run: yarn install --immutable --immutable-cache --check-cache
 
       - name: Run Evals
-        uses: braintrustdata/eval-action@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          api_key: ${{ secrets.BRAINTRUST_API_KEY }}
-          runtime: node
-          root: evals
+        id: evals
+        run: yarn tsx evals/llm.evals.ts
+
+      - name: Add Evals Report to Github Comment
+        if: always()
+        run: echo "$(cat llm.evals.md)" >> $GITHUB_STEP_SUMMARY
+        

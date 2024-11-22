@@ -11,9 +11,7 @@ jobs:
     name: Run evals
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      repository-projects: write
+      write-all
 
     steps:
       - uses: actions/setup-node@v4
@@ -31,6 +29,7 @@ jobs:
       - name: Run Evals
         uses: braintrustdata/eval-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           api_key: ${{ secrets.BRAINTRUST_API_KEY }}
           runtime: node
           root: evals

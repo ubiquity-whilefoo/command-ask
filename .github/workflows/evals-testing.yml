@@ -8,9 +8,12 @@ permissions: write-all
 
 jobs:
   eval:
-    permissions: write-all
     name: Run evals
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      repository-projects: write
 
     steps:
       - uses: actions/setup-node@v4

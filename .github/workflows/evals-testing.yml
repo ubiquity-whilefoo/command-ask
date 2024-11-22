@@ -5,15 +5,20 @@ on:
     pull_request:
 
 permissions:
-  pull-requests: write
   contents: read
+  pull-requests: write
+  checks: write
+  statuses: write
 
 jobs:
   eval:
     name: Run evals
     runs-on: ubuntu-latest
     permissions:
-      write-all
+      contents: read
+      pull-requests: write
+      checks: write
+      statuses: write
 
     steps:
       - uses: actions/setup-node@v4

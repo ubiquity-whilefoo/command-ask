@@ -12,6 +12,8 @@ import issueTemplate from "../tests/__mocks__/issue-template";
 import { writeFileSync } from "fs";
 import { fetchContext, formattedHistory, initAdapters } from "./handlers/setup-context";
 
+console.log(process.env);
+
 // Required environment variables with type assertion
 const requiredEnvVars = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY as string,

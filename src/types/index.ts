@@ -1,2 +1,2 @@
 export * from "./context";
-export * from "./plugin-inputs";
+export * from "./plugin-input";

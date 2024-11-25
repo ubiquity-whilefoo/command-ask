@@ -27,7 +27,7 @@ export class Comment extends SuperSupabase {
   async getComment(commentNodeId: string): Promise<CommentType[] | null> {
     const { data, error } = await this.supabase.from("issue_comments").select("*").eq("id", commentNodeId);
     if (error) {
-      this.context.logger.error("Error getting comment", error);
+      this.context.logger.error("Error getting comment", { err: error });
     }
     return data;
   }
@@ -44,7 +44,7 @@ export class Comment extends SuperSupabase {
       max_results: 10,
     });
     if (error) {
-      this.context.logger.error("Error finding similar comments", error);
+      this.context.logger.error("Error finding similar comments", { err: error });
     }
     return data;
   }

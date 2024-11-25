@@ -17,6 +17,8 @@ on:
         description: "Ref"
       signature:
         description: "Signature sent from the Kernel"
+      command:
+        description: "Command"
 
 jobs:
   compute:

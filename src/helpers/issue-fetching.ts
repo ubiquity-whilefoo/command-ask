@@ -119,7 +119,7 @@ export async function fetchPullRequestDiff(context: Context, org: string, repo: 
   let diff: string;
 
   try {
-    const diffResponse = await octokit.pulls.get({
+    const diffResponse = await octokit.rest.pulls.get({
       owner: org,
       repo,
       pull_number: issue,

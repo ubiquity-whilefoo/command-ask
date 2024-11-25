@@ -1,5 +1,21 @@
 {
   "name": "command-ask",
   "description": "A highly context aware organization integrated chatbot",
-  "ubiquity:listeners": ["issue_comment.created"]
+  "ubiquity:listeners": ["issue_comment.created"],
+  "skipBotEvents": true,
+  "commands": {
+    "ask": {
+      "ubiquity:example": "/ask",
+      "description": "Ask any question about the repository, issue or pull request",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "description": "Question",
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
 }

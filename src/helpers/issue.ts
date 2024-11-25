@@ -151,14 +151,14 @@ export async function fetchCodeLinkedFromIssue(
         const commitSha = url.match(/https?:\/\/github\.com\/[^/]+\/[^/]+\/blob\/([^/]+)\/.+/);
         let response;
         if (commitSha) {
-          response = await octokit.repos.getContent({
+          response = await octokit.rest.repos.getContent({
             owner: parsedUrl.owner,
             repo: parsedUrl.repo,
             ref: commitSha ? commitSha[1] : "main",
             path: parsedUrl.path,
           });
         } else {
-          response = await octokit.repos.getContent({
+          response = await octokit.rest.repos.getContent({
             owner: parsedUrl.owner,
             repo: parsedUrl.repo,
             path: parsedUrl.path,
@@ -195,7 +195,7 @@ export async function fetchCodeLinkedFromIssue(
 export async function pullReadmeFromRepoForIssue(params: FetchParams): Promise<string | undefined> {
   let readme;
   try {
-    const response = await params.context.octokit.repos.getContent({
+    const response = await params.context.octokit.rest.repos.getContent({
       owner: params.context.payload.repository.owner?.login || params.context.payload.organization?.login || "",
       repo: params.context.payload.repository.name,
       path: "README.md",

@@ -1,20 +1,18 @@
 import { db } from "./__mocks__/db";
 import { server } from "./__mocks__/node";
 import usersGet from "./__mocks__/users-get.json";
-import { expect, describe, beforeAll, beforeEach, afterAll, afterEach, it } from "@jest/globals";
-import { Context, SupportedEventsU } from "../src/types";
+import { expect, describe, beforeAll, beforeEach, afterAll, afterEach, it, jest } from "@jest/globals";
+import { Context, SupportedEvents } from "../src/types";
 import { drop } from "@mswjs/data";
 import issueTemplate from "./__mocks__/issue-template";
 import repoTemplate from "./__mocks__/repo-template";
-import { askQuestion } from "../src/handlers/ask-llm";
-import { runPlugin } from "../src/plugin";
 import { TransformDecodeCheckError, Value } from "@sinclair/typebox/value";
 import { envSchema } from "../src/types/env";
 import { CompletionsType } from "../src/adapters/openai/helpers/completions";
 import { logger } from "../src/helpers/errors";
+import { Octokit } from "@octokit/rest";
 
 const TEST_QUESTION = "what is pi?";
-const TEST_SLASH_COMMAND = "@UbiquityOS what is pi?";
 const LOG_CALLER = "_Logs.<anonymous>";
 const ISSUE_ID_2_CONTENT = "More context here #2";
 const ISSUE_ID_3_CONTENT = "More context here #3";
@@ -36,12 +34,9 @@ type Comment = {
   pull_request_url?: string;
 };
 
-const octokit = jest.requireActual("@octokit/rest");
-jest.requireActual("openai");
-
 // extractDependencies
 
-jest.mock("../src/handlers/ground-truths/chat-bot", () => {
+jest.unstable_mockModule("../src/handlers/ground-truths/chat-bot", () => {
   return {
     fetchRepoDependencies: jest.fn().mockReturnValue({
       dependencies: {},
@@ -74,8 +69,9 @@ describe("Ask plugin tests", () => {
   });
 
   it("should ask GPT a question", async () => {
-    const ctx = createContext(TEST_SLASH_COMMAND);
+    const ctx = createContext(TEST_QUESTION);
     createComments([transformCommentTemplate(1, 1, TEST_QUESTION, "ubiquity", "test-repo", true)]);
+    const askQuestion = (await import("../src/handlers/ask-llm")).askQuestion;
     const res = await askQuestion(ctx, TEST_QUESTION);
 
     expect(res).toBeDefined();
@@ -83,44 +79,13 @@ describe("Ask plugin tests", () => {
     expect(res?.answer).toBe(MOCK_ANSWER);
   });
 
-  it("should not ask GPT a question if comment is from a bot", async () => {
-    const ctx = createContext(TEST_SLASH_COMMAND);
-    const infoSpy = jest.spyOn(ctx.logger, "info");
-
-    createComments([transformCommentTemplate(1, 1, TEST_QUESTION, "ubiquity", "test-repo", true)]);
-    if (!ctx.payload.comment.user) return;
-    ctx.payload.comment.user.type = "Bot";
-    await runPlugin(ctx);
-
-    expect(infoSpy).toHaveBeenCalledWith("Comment is from a bot. Skipping.");
-  });
-
-  it("should not ask GPT a question if comment does not start with bot name", async () => {
-    const ctx = createContext(TEST_QUESTION);
-    const infoSpy = jest.spyOn(ctx.logger, "info");
-
-    createComments([transformCommentTemplate(1, 1, TEST_QUESTION, "ubiquity", "test-repo", true)]);
-    await runPlugin(ctx);
-
-    expect(infoSpy).toHaveBeenCalledWith("Comment does not mention the app. Skipping.");
-  });
-
-  it("should not ask GPT a question if no question is provided", async () => {
-    const ctx = createContext(`@UbiquityOS `);
-    const infoSpy = jest.spyOn(ctx.logger, "info");
-
-    createComments([transformCommentTemplate(1, 1, TEST_QUESTION, "ubiquity", "test-repo", true)]);
-    await runPlugin(ctx);
-
-    expect(infoSpy).toHaveBeenCalledWith("No question provided. Skipping.");
-  });
   it("Should throw if OPENAI_API_KEY is not defined", () => {
     const settings = {};
     expect(() => Value.Decode(envSchema, settings)).toThrow(TransformDecodeCheckError);
   });
 
   it("should construct the chat history correctly", async () => {
-    const ctx = createContext(TEST_SLASH_COMMAND);
+    const ctx = createContext(TEST_QUESTION);
     const infoSpy = jest.spyOn(ctx.logger, "info");
     createComments([
       transformCommentTemplate(1, 1, ISSUE_ID_2_CONTENT, "ubiquity", "test-repo", true, "2"),
@@ -129,7 +94,8 @@ describe("Ask plugin tests", () => {
       transformCommentTemplate(4, 3, "Just a comment", "ubiquity", "test-repo", true, "1"),
     ]);
 
-    await runPlugin(ctx);
+    const issueCommentCreatedCallback = (await import("../src/handlers/comment-created-callback")).issueCommentCreatedCallback;
+    await issueCommentCreatedCallback(ctx);
     const prompt = `=== Current Task Specification === ubiquity/test-repo/1 ===
 
     This is a demo spec for a demo task just perfect for testing.
@@ -266,7 +232,7 @@ function createComments(comments: Comment[]) {
   }
 }
 
-function createContext(body = TEST_SLASH_COMMAND) {
+function createContext(body = TEST_QUESTION) {
   const user = db.users.findFirst({ where: { id: { equals: 1 } } });
   return {
     payload: {
@@ -278,6 +244,12 @@ function createContext(body = TEST_SLASH_COMMAND) {
       installation: { id: 1 } as unknown as Context["payload"]["installation"],
       organization: { login: "ubiquity" } as unknown as Context["payload"]["organization"],
     },
+    command: {
+      name: "ask",
+      parameters: {
+        question: body,
+      },
+    },
     owner: "ubiquity",
     repo: "test-repo",
     logger: logger,
@@ -285,6 +257,9 @@ function createContext(body = TEST_SLASH_COMMAND) {
     env: {
       UBIQUITY_OS_APP_NAME: "UbiquityOS",
       OPENAI_API_KEY: "test",
+      VOYAGEAI_API_KEY: "test",
+      SUPABASE_URL: "test",
+      SUPABASE_KEY: "test",
     },
     adapters: {
       supabase: {
@@ -431,7 +406,7 @@ function createContext(body = TEST_SLASH_COMMAND) {
         },
       },
     },
-    octokit: new octokit.Octokit(),
-    eventName: "issue_comment.created" as SupportedEventsU,
+    octokit: new Octokit(),
+    eventName: "issue_comment.created" as SupportedEvents,
   } as unknown as Context;
 }

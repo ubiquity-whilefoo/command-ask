@@ -13,7 +13,7 @@ export async function fetchRepoDependencies(context: Context) {
   } = context;
 
   try {
-    const { data: packageJson } = await octokit.repos.getContent({
+    const { data: packageJson } = await octokit.rest.repos.getContent({
       owner,
       repo,
       path: "package.json",
@@ -51,7 +51,7 @@ export async function fetchRepoLanguageStats(context: Context) {
     },
   } = context;
   try {
-    const { data: languages } = await octokit.repos.listLanguages({
+    const { data: languages } = await octokit.rest.repos.listLanguages({
       owner,
       repo,
     });

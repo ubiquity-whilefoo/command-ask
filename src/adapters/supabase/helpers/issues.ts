@@ -27,7 +27,7 @@ export class Issue extends SuperSupabase {
   async getIssue(issueNodeId: string): Promise<IssueType[] | null> {
     const { data, error } = await this.supabase.from("issues").select("*").eq("id", issueNodeId).returns<IssueType[]>();
     if (error) {
-      this.context.logger.error("Error getting issue", error);
+      this.context.logger.error("Error getting issue", { err: error });
       return null;
     }
     return data;
@@ -43,7 +43,7 @@ export class Issue extends SuperSupabase {
       max_results: 10,
     });
     if (error) {
-      this.context.logger.error("Error finding similar issues", error);
+      this.context.logger.error("Error finding similar issues", { err: error });
       return [];
     }
     return data;

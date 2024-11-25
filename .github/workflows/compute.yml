@@ -25,13 +25,6 @@ jobs:
     name: "LLM Reply"
     runs-on: ubuntu-latest
     permissions: write-all
-    env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      VOYAGEAI_API_KEY: ${{ secrets.VOYAGEAI_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      UBIQUITY_OS_APP_NAME: ${{ secrets.UBIQUITY_OS_APP_NAME }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,13 +34,12 @@ jobs:
         with:
           node-version: "20.10.0"
 
-      - name: install dependencies
-        run: yarn
-
       - name: execute directive
-        run: yarn tsx ./src/main.ts
+        run: node ./dist/index.js
         id: command-ask
         env:
+          KERNEL_PUBLIC_KEY: ${{ secrets.KERNEL_PUBLIC_KEY }}
+          PLUGIN_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           VOYAGEAI_API_KEY: ${{ secrets.VOYAGEAI_API_KEY }}

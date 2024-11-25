@@ -8,6 +8,8 @@ jobs:
   update-manifest:
     name: "Update Manifest and Commit Changes"
     runs-on: ubuntu-latest
+    permissions: write-all
+
     steps:
       - name: Update Manifest and Commit Changes
         uses: ubiquity-os/action-deploy-plugin@main

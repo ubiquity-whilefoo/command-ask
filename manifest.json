@@ -17,5 +17,25 @@
         }
       }
     }
+  },
+  "configuration": {
+    "type": "object",
+    "properties": {
+      "model": {
+        "default": "o1-mini",
+        "type": "string"
+      },
+      "openAiBaseUrl": {
+        "type": "string"
+      },
+      "similarityThreshold": {
+        "default": 0.9,
+        "type": "number"
+      },
+      "maxTokens": {
+        "default": 10000,
+        "type": "number"
+      }
+    }
   }
 }

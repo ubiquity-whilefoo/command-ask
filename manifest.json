@@ -23,17 +23,21 @@
     "properties": {
       "model": {
         "default": "o1-mini",
+        "description": "The LLM model you wish to use",
         "type": "string"
       },
       "openAiBaseUrl": {
+        "description": "The base URL for the OpenAI API",
         "type": "string"
       },
       "similarityThreshold": {
         "default": 0.9,
+        "description": "When fetching embeddings context, the similarity threshold to use (1- similarityThreshold)",
         "type": "number"
       },
       "maxTokens": {
         "default": 10000,
+        "description": "The max completion tokens you want to the model to generate",
         "type": "number"
       }
     }

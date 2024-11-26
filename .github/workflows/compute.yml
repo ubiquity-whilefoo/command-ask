@@ -25,6 +25,7 @@ jobs:
     name: "LLM Reply"
     runs-on: ubuntu-latest
     permissions: write-all
+    environment: ${{ github.ref == 'refs/heads/main' && 'main' || 'development' }}
 
     steps:
       - uses: actions/checkout@v4

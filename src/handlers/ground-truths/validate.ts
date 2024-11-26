@@ -9,7 +9,7 @@ export function validateGroundTruths(truthsString: string | null): string[] {
   try {
     truths = JSON.parse(truthsString);
   } catch (err) {
-    throw logger.error("Failed to parse ground truths");
+    throw logger.error("Failed to parse ground truths", { err });
   }
   if (!Array.isArray(truths)) {
     throw logger.error("Ground truths must be an array");

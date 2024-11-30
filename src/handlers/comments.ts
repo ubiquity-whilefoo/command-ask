@@ -36,22 +36,25 @@ export function createKey(issueUrl: string, issue?: number) {
 
   let key;
 
-  if (urlParts.length === 7) {
+  // Handle PR review comment URLs which have 'pull' and 'comments' in the path
+  if (urlParts.includes("pull") && urlParts.includes("comments")) {
+    // Extract the PR number from the URL
+    const prIndex = urlParts.indexOf("pull");
+    if (prIndex >= 0 && prIndex + 1 < urlParts.length) {
+      const prNumber = urlParts[prIndex + 1];
+      const [, , , issueOrg, issueRepo] = urlParts;
+      key = `${issueOrg}/${issueRepo}/${prNumber}`;
+    }
+  } else if (urlParts.length === 7) {
     const [, , , issueOrg, issueRepo, , issueNumber] = urlParts;
     key = `${issueOrg}/${issueRepo}/${issueNumber}`;
-  }
-
-  if (urlParts.length === 5) {
+  } else if (urlParts.length === 5) {
     const [, , issueOrg, issueRepo] = urlParts;
     key = `${issueOrg}/${issueRepo}/${issue}`;
-  }
-
-  if (urlParts.length === 8) {
+  } else if (urlParts.length === 8) {
     const [, , , issueOrg, issueRepo, , , issueNumber] = urlParts;
     key = `${issueOrg}/${issueRepo}/${issueNumber || issue}`;
-  }
-
-  if (urlParts.length === 3) {
+  } else if (urlParts.length === 3) {
     const [issueOrg, issueRepo, issueNumber] = urlParts;
     key = `${issueOrg}/${issueRepo}/${issueNumber || issue}`;
   }

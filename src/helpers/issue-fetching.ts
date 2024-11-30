@@ -1,11 +1,10 @@
 import { Context } from "../types";
-import { IssueComments, FetchParams, Issue, LinkedIssues, ReviewComments, SimplifiedComment, PullRequestDetails } from "../types/github-types";
+import { FetchParams, Issue, LinkedIssues, SimplifiedComment, PullRequestDetails } from "../types/github-types";
 import { StreamlinedComment, TokenLimits } from "../types/llm";
-import { logger } from "./errors";
-import { dedupeStreamlinedComments, fetchCodeLinkedFromIssue, idIssueFromComment, mergeStreamlinedComments, pullReadmeFromRepoForIssue } from "./issue";
-import { handleSpec, handleSpecAndBodyKeys, throttlePromises } from "./issue-handling";
+import { fetchCodeLinkedFromIssue, idIssueFromComment, mergeStreamlinedComments } from "./issue";
+import { handleSpec } from "./issue-handling";
 import { getAllStreamlinedComments } from "../handlers/comments";
-import { processPullRequestDiff } from "./pull-request-parsing";
+import { fetchPullRequestComments, fetchPullRequestDetails } from "./pull-request-fetching";
 
 interface EnhancedLinkedIssues extends Omit<LinkedIssues, "prDetails"> {
   prDetails?: PullRequestDetails;
@@ -41,7 +40,8 @@ export async function fetchIssue(params: FetchParams, tokenLimits?: TokenLimits)
     // If this is a PR, fetch additional details
     if (issue.pull_request) {
       const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params.context);
-      issue.prDetails = await fetchPullRequestDetails(params.context, targetOwner, targetRepo, targetIssueNum, currentTokenLimits);
+      logger.info(`Fetching PR details for ${targetOwner}/${targetRepo}#${targetIssueNum} with token limits: ${JSON.stringify(currentTokenLimits)}`);
+      issue.prDetails = await fetchPullRequestDetails(params.context, targetOwner, targetRepo, targetIssueNum);
     }
 
     return issue;
@@ -56,74 +56,10 @@ export async function fetchIssue(params: FetchParams, tokenLimits?: TokenLimits)
   }
 }
 
-async function fetchPullRequestDetails(context: Context, org: string, repo: string, issue: number, tokenLimits: TokenLimits): Promise<PullRequestDetails> {
-  try {
-    // Fetch diff
-    const diffResponse = await context.octokit.rest.pulls.get({
-      owner: org,
-      repo,
-      pull_number: issue,
-      mediaType: { format: "diff" },
-    });
-    const diff = diffResponse.data as unknown as string;
-
-    // Fetch files
-    const filesResponse = await context.octokit.rest.pulls.listFiles({
-      owner: org,
-      repo,
-      pull_number: issue,
-    });
-
-    const files = await Promise.all(
-      filesResponse.data.map(async (file) => {
-        // Get the file content for both before and after versions
-        let diffContent = file.patch || "";
-
-        // If no patch is available but the file exists, try to get its content
-        if (!diffContent && file.status !== "removed") {
-          try {
-            const fileResponse = await context.octokit.rest.repos.getContent({
-              owner: org,
-              repo,
-              path: file.filename,
-              ref: file.sha,
-            });
-
-            if ("content" in fileResponse.data) {
-              const content = Buffer.from(fileResponse.data.content, "base64").toString();
-              diffContent = content;
-            }
-          } catch (e) {
-            logger.error(`Error fetching file content`, { file: file.filename, err: String(e) });
-          }
-        }
-
-        return {
-          filename: file.filename,
-          diffContent,
-          status: file.status as "added" | "modified" | "deleted",
-        };
-      })
-    );
-
-    // Process diff with token counting
-    const processedDiff = await processPullRequestDiff(diff, tokenLimits);
-
-    return {
-      diff: processedDiff.diff,
-      files,
-    };
-  } catch (e) {
-    logger.error(`Error fetching PR details`, { owner: org, repo, issue, err: String(e) });
-    return { diff: null };
-  }
-}
-
 export async function fetchIssueComments(params: FetchParams, tokenLimits?: TokenLimits) {
   const { octokit, payload, logger } = params.context;
   const { issueNum, owner, repo } = params;
 
-  // Ensure we have valid owner and repo
   const targetOwner = owner || payload.repository.owner.login;
   const targetRepo = repo || payload.repository.name;
   const targetIssueNum = issueNum || payload.issue.number;
@@ -140,58 +76,68 @@ export async function fetchIssueComments(params: FetchParams, tokenLimits?: Toke
     currentTokenLimits
   );
 
-  let reviewComments: ReviewComments[] = [];
-  let issueComments: IssueComments[] = [];
+  if (!issue) {
+    return { issue: null, comments: [], linkedIssues: [] };
+  }
 
-  try {
-    if (issue?.pull_request) {
-      const response = await octokit.rest.pulls.listReviewComments({
-        owner: targetOwner,
-        repo: targetRepo,
-        pull_number: targetIssueNum,
-      });
-      reviewComments = response.data;
+  let comments: SimplifiedComment[] = [];
+  let linkedIssues: LinkedIssues[] = [];
 
-      const response2 = await octokit.rest.issues.listComments({
-        owner: targetOwner,
-        repo: targetRepo,
-        issue_number: targetIssueNum,
-      });
+  if (issue.pull_request) {
+    // For PRs, get both types of comments and linked issues
+    const prData = await fetchPullRequestComments({
+      ...params,
+      owner: targetOwner,
+      repo: targetRepo,
+      issueNum: targetIssueNum,
+    });
 
-      issueComments = response2.data;
-    } else {
+    comments = prData.comments;
+
+    // Convert PR linked issues to LinkedIssues format
+    linkedIssues = prData.linkedIssues.map((linked: { number: number; owner: string; repo: string; url: string; body: string }) => ({
+      issueNumber: linked.number,
+      owner: linked.owner,
+      repo: linked.repo,
+      url: linked.url,
+      body: linked.body,
+      comments: [],
+    }));
+  } else {
+    // For regular issues, get issue comments
+    try {
       const response = await octokit.rest.issues.listComments({
         owner: targetOwner,
         repo: targetRepo,
         issue_number: targetIssueNum,
       });
-      issueComments = response.data;
+
+      comments = response.data
+        .filter((comment): comment is typeof comment & { body: string } => comment.user?.type !== "Bot" && typeof comment.body === "string")
+        .map((comment) => ({
+          body: comment.body,
+          user: comment.user,
+          id: comment.id.toString(),
+          org: targetOwner,
+          repo: targetRepo,
+          issueUrl: comment.html_url,
+        }));
+    } catch (e) {
+      logger.error(`Error fetching issue comments`, {
+        e,
+        owner: targetOwner,
+        repo: targetRepo,
+        issue_number: targetIssueNum,
+      });
     }
-  } catch (e) {
-    logger.error(`Error fetching comments`, {
-      e,
-      owner: targetOwner,
-      repo: targetRepo,
-      issue_number: targetIssueNum,
-    });
   }
 
-  const comments = [...issueComments, ...reviewComments].filter((comment) => comment.user?.type !== "Bot");
-  const simplifiedComments = castCommentsToSimplifiedComments(comments, {
-    ...params,
-    owner: targetOwner,
-    repo: targetRepo,
-  });
-
-  return {
-    issue,
-    comments: simplifiedComments,
-  };
+  return { issue, comments, linkedIssues };
 }
 
 export async function recursivelyFetchLinkedIssues(params: FetchParams) {
   const maxDepth = params.maxDepth || 15;
-  const currentDepth = params.currentDepth || 0;
+  const _currentDepth = params.currentDepth || 0;
 
   // Initialize tree structure with main issue as root
   const issueTree: Record<
@@ -213,6 +159,9 @@ export async function recursivelyFetchLinkedIssues(params: FetchParams) {
   // Create the root node for the main issue
   const mainIssueKey = `${params.owner || params.context.payload.repository.owner.login}/${params.repo || params.context.payload.repository.name}/${params.issueNum || params.context.payload.issue.number}`;
 
+  // Get comments and linked issues for the main issue/PR
+  const { comments, linkedIssues: initialLinkedIssues } = await fetchIssueComments(params);
+
   issueTree[mainIssueKey] = {
     issue: {
       body: mainIssue.body || "",
@@ -220,195 +169,154 @@ export async function recursivelyFetchLinkedIssues(params: FetchParams) {
       repo: params.repo || params.context.payload.repository.name,
       issueNumber: params.issueNum || params.context.payload.issue.number,
       url: mainIssue.html_url,
-      comments: [],
+      comments,
       prDetails: mainIssue.prDetails,
     },
     children: [],
     depth: 0,
   };
 
-  // Fetch linked issues and comments for the main issue
-  const { linkedIssues, seen, specAndBodies, streamlinedComments } = await fetchLinkedIssues({
-    ...params,
-    currentDepth,
-    maxDepth,
-  });
-
-  // Process linked issues as children of the main issue
-  if (currentDepth < maxDepth) {
-    const fetchPromises = linkedIssues.map(async (linkedIssue) => {
-      const issueKey = `${linkedIssue.owner}/${linkedIssue.repo}/${linkedIssue.issueNumber}`;
-
-      // Skip if it's the main issue or already processed
-      if (issueKey === mainIssueKey || seen.has(issueKey)) return;
-
-      // Add to tree structure as child of main issue
-      issueTree[issueKey] = {
-        issue: linkedIssue as EnhancedLinkedIssues,
-        children: [],
-        depth: 1,
-        parent: mainIssueKey,
-      };
-      issueTree[mainIssueKey].children.push(issueKey);
-
-      return await mergeCommentsAndFetchSpec(
-        {
-          ...params,
-          currentDepth: currentDepth + 1,
-          maxDepth,
-          parentIssueKey: issueKey,
-        },
-        linkedIssue,
-        streamlinedComments,
-        specAndBodies,
-        seen
-      );
-    });
-    await throttlePromises(fetchPromises, 10);
-  }
-
-  // Process gathered keys
-  const linkedIssuesKeys = linkedIssues.map((issue) => `${issue.owner}/${issue.repo}/${issue.issueNumber}`);
-  const specAndBodyKeys = Array.from(new Set([...Object.keys(specAndBodies), ...Object.keys(streamlinedComments), ...linkedIssuesKeys]));
-
-  await handleSpecAndBodyKeys(
-    specAndBodyKeys,
-    {
-      ...params,
-      currentDepth,
-      maxDepth,
-    },
-    dedupeStreamlinedComments(streamlinedComments),
-    seen
-  );
-  return { linkedIssues, specAndBodies, streamlinedComments, issueTree };
-}
-
-export async function fetchLinkedIssues(params: FetchParams, tokenLimits?: TokenLimits) {
-  const currentDepth = params.currentDepth || 0;
-  const maxDepth = params.maxDepth || 2;
-
-  if (currentDepth >= maxDepth) {
-    return {
-      streamlinedComments: {},
-      linkedIssues: [],
-      specAndBodies: {},
-      seen: new Set<string>(),
-    };
-  }
-
-  const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params.context);
-
-  const fetchedIssueAndComments = await fetchIssueComments(params, currentTokenLimits);
-  if (!fetchedIssueAndComments.issue) {
-    return { streamlinedComments: {}, linkedIssues: [], specAndBodies: {}, seen: new Set<string>() };
-  }
-
-  if (!params.owner || !params.repo) {
-    throw logger.error("Owner or repo not found");
-  }
-
-  const issue = fetchedIssueAndComments.issue;
-  const comments = fetchedIssueAndComments.comments.filter((comment) => comment.body !== undefined);
-
-  const issueKey = `${params.owner}/${params.repo}/${params.issueNum}`;
-  const linkedIssues: LinkedIssues[] = [
-    {
-      body: issue.body,
-      comments,
-      issueNumber: params.issueNum || 0,
-      owner: params.owner,
-      repo: params.repo,
-      url: issue.html_url,
-      prDetails: issue.prDetails,
-    },
-  ];
+  // Process all comments to find linked issues
+  const linkedIssues: LinkedIssues[] = [issueTree[mainIssueKey].issue];
   const specAndBodies: Record<string, string> = {};
-  const seen = new Set<string>([issueKey]);
+  const seen = new Set<string>([mainIssueKey]);
+  const streamlinedComments: Record<string, StreamlinedComment[]> = {};
 
-  // Add issue body as a comment
-  const issueComment = {
-    body: issue.body,
-    user: issue.user,
-    id: issue.id.toString(),
-    org: params.owner,
-    repo: params.repo,
-    issueUrl: issue.html_url,
-  };
-
-  const allComments = [issueComment, ...comments];
-
-  // Only fetch README for the main issue (no parent key)
-  if (!params.parentIssueKey) {
-    try {
-      const readmeSection = await pullReadmeFromRepoForIssue(params, currentTokenLimits);
-      if (readmeSection) {
-        linkedIssues[0].readme = readmeSection;
+  // Add initial linked issues from PR if any
+  if (initialLinkedIssues.length > 0) {
+    for (const linkedIssue of initialLinkedIssues) {
+      const linkedKey = `${linkedIssue.owner}/${linkedIssue.repo}/${linkedIssue.issueNumber}`;
+      if (!seen.has(linkedKey)) {
+        seen.add(linkedKey);
+        linkedIssues.push(linkedIssue);
+        issueTree[mainIssueKey].children.push(linkedKey);
+        issueTree[linkedKey] = {
+          issue: linkedIssue,
+          children: [],
+          depth: 1,
+          parent: mainIssueKey,
+        };
       }
-    } catch (error) {
-      logger.error("Error fetching README:", { error: error as Error });
     }
   }
 
-  const processedUrls = new Set<string>();
-  for (const comment of allComments) {
-    if (!comment.body) continue;
-    const foundIssues = idIssueFromComment(comment.body, params);
-    const foundCodes = await fetchCodeLinkedFromIssue(comment.body, params.context, comment.issueUrl);
+  // Queue for breadth-first exploration of the tree
+  const queue: Array<{
+    key: string;
+    depth: number;
+    parent: string | undefined;
+  }> = [
+    {
+      key: mainIssueKey,
+      depth: 0,
+      parent: undefined,
+    },
+  ];
 
-    if (foundIssues) {
-      for (const linkedIssue of foundIssues) {
-        const linkedKey = `${linkedIssue.owner}/${linkedIssue.repo}/${linkedIssue.issueNumber}`;
-        const linkedUrl = linkedIssue.url;
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || current.depth >= maxDepth) continue;
 
-        // Skip if we've already processed this URL or key
-        if (seen.has(linkedKey) || processedUrls.has(linkedUrl)) continue;
+    const node = issueTree[current.key];
+    if (!node) continue;
 
-        seen.add(linkedKey);
-        processedUrls.add(linkedUrl);
+    // Process comments in the current node
+    for (const comment of node.issue.comments || []) {
+      if (!comment.body) continue;
+      const foundIssues = idIssueFromComment(comment.body, params);
+      if (foundIssues) {
+        for (const foundIssue of foundIssues) {
+          const foundKey = `${foundIssue.owner}/${foundIssue.repo}/${foundIssue.issueNumber}`;
+          if (seen.has(foundKey)) continue;
 
-        if (currentDepth < maxDepth) {
-          const { comments: fetchedComments, issue: fetchedIssue } = await fetchIssueComments(
-            {
-              ...params,
-              issueNum: linkedIssue.issueNumber,
-              owner: linkedIssue.owner,
-              repo: linkedIssue.repo,
-              currentDepth: currentDepth + 1,
-            },
-            currentTokenLimits
-          );
+          seen.add(foundKey);
+
+          // Fetch the found issue and its comments
+          const { issue: fetchedIssue, comments: fetchedComments } = await fetchIssueComments({
+            ...params,
+            owner: foundIssue.owner,
+            repo: foundIssue.repo,
+            issueNum: foundIssue.issueNumber,
+            currentDepth: current.depth + 1,
+            maxDepth,
+          });
 
           if (!fetchedIssue || !fetchedIssue.body) continue;
 
-          specAndBodies[linkedKey] = fetchedIssue.body;
-          linkedIssue.body = fetchedIssue.body;
-          linkedIssue.comments = fetchedComments;
-          linkedIssue.prDetails = fetchedIssue.prDetails;
-          linkedIssues.push(linkedIssue);
+          // Add to tree structure
+          issueTree[foundKey] = {
+            issue: {
+              body: fetchedIssue.body,
+              owner: foundIssue.owner,
+              repo: foundIssue.repo,
+              issueNumber: foundIssue.issueNumber,
+              url: foundIssue.url,
+              comments: fetchedComments,
+              prDetails: fetchedIssue.pull_request ? fetchedIssue.prDetails : undefined,
+            },
+            children: [],
+            depth: current.depth + 1,
+            parent: current.key,
+          };
+          issueTree[current.key].children.push(foundKey);
+
+          // Add to linked issues and queue for exploration
+          linkedIssues.push(issueTree[foundKey].issue);
+          specAndBodies[foundKey] = fetchedIssue.body;
+          queue.push({
+            key: foundKey,
+            depth: current.depth + 1,
+            parent: current.key,
+          });
+        }
+      }
+
+      // Process code references
+      const foundCodes = await fetchCodeLinkedFromIssue(comment.body, params.context, comment.issueUrl);
+      if (foundCodes) {
+        for (const code of foundCodes) {
+          const codeComment = {
+            body: code.body,
+            user: code.user,
+            id: code.id,
+            org: code.org,
+            repo: code.repo,
+            issueUrl: code.issueUrl,
+          };
+          if (!node.issue.comments?.some((c) => c.id === codeComment.id)) {
+            node.issue.comments = [...(node.issue.comments || []), codeComment];
+          }
         }
       }
     }
 
-    if (foundCodes) {
-      for (const code of foundCodes) {
-        const codeComment = {
-          body: code.body,
-          user: code.user,
-          id: code.id,
-          org: code.org,
-          repo: code.repo,
-          issueUrl: code.issueUrl,
-        };
-        if (!allComments.some((c) => c.id === codeComment.id)) {
-          allComments.push(codeComment);
-        }
-      }
+    // Process specs and bodies
+    if (node.issue.body) {
+      await handleSpec(
+        {
+          ...params,
+          currentDepth: current.depth,
+          maxDepth,
+          parentIssueKey: current.parent,
+        },
+        node.issue.body,
+        specAndBodies,
+        current.key,
+        seen,
+        streamlinedComments
+      );
     }
   }
 
-  const streamlinedComments = await getAllStreamlinedComments(linkedIssues);
-  return { streamlinedComments, linkedIssues, specAndBodies, seen };
+  // Process all issues for streamlined comments
+  for (const issue of linkedIssues) {
+    if (issue.comments) {
+      const streamed = await getAllStreamlinedComments([issue]);
+      streamlinedComments[`${issue.owner}/${issue.repo}/${issue.issueNumber}`] = streamed[`${issue.owner}/${issue.repo}/${issue.issueNumber}`] || [];
+    }
+  }
+
+  return { linkedIssues, specAndBodies, streamlinedComments, issueTree };
 }
 
 export async function mergeCommentsAndFetchSpec(
@@ -427,38 +335,4 @@ export async function mergeCommentsAndFetchSpec(
   if (linkedIssue.body) {
     await handleSpec(params, linkedIssue.body, specOrBodies, `${linkedIssue.owner}/${linkedIssue.repo}/${linkedIssue.issueNumber}`, seen, streamlinedComments);
   }
-}
-
-function castCommentsToSimplifiedComments(comments: (IssueComments | ReviewComments)[], params: FetchParams): SimplifiedComment[] {
-  if (!comments) {
-    return [];
-  }
-
-  return comments
-    .filter((comment) => comment.body !== undefined)
-    .map((comment) => {
-      if ("pull_request_review_id" in comment) {
-        return {
-          body: comment.body,
-          user: comment.user,
-          id: comment.id.toString(),
-          org: params.owner || params.context.payload.repository.owner.login,
-          repo: params.repo || params.context.payload.repository.name,
-          issueUrl: comment.html_url,
-        };
-      }
-
-      if ("html_url" in comment) {
-        return {
-          body: comment.body,
-          user: comment.user,
-          id: comment.id.toString(),
-          org: params.owner || params.context.payload.repository.owner.login,
-          repo: params.repo || params.context.payload.repository.name,
-          issueUrl: comment.html_url,
-        };
-      }
-
-      throw logger.error("Comment type not recognized", { comment, params });
-    });
 }

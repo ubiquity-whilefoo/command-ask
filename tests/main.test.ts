@@ -11,6 +11,7 @@ import { envSchema } from "../src/types/env";
 import { CompletionsType } from "../src/adapters/openai/helpers/completions";
 import { logger } from "../src/helpers/errors";
 import { Octokit } from "@octokit/rest";
+import { createKey } from "../src/handlers/comments";
 
 const TEST_QUESTION = "what is pi?";
 const LOG_CALLER = "_Logs.<anonymous>";
@@ -84,6 +85,12 @@ describe("Ask plugin tests", () => {
   it("Should throw if OPENAI_API_KEY is not defined", () => {
     const settings = {};
     expect(() => Value.Decode(envSchema, settings)).toThrow(TransformDecodeCheckError);
+  });
+
+  it("should handle PR review comment URLs correctly", () => {
+    const prReviewUrl = "https://github.com/ubiquity/test-repo/pull/123/comments/456";
+    const key = createKey(prReviewUrl);
+    expect(key).toBe("ubiquity/test-repo/123");
   });
 
   it("should construct the chat history correctly", async () => {

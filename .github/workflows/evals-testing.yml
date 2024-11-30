@@ -11,8 +11,6 @@ permissions:
 
 jobs:
   eval:
-    # Only run if the knip workflow succeeded
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     name: Run evals
     runs-on: ubuntu-latest
     permissions: write-all

@@ -30,11 +30,11 @@ jobs:
 
       - name: Install Dependencies
         id: install
-        run: yarn install --immutable --immutable-cache --check-cache
+        run: bun install --immutable --immutable-cache --check-cache
 
       - name: Run Evals
         id: evals
-        run: yarn eval
+        run: bun eval
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}

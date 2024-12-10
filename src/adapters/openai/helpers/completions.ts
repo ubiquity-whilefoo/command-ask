@@ -118,6 +118,11 @@ export class Completions extends SuperOpenAi {
       },
     });
 
+    if (!res.choices || !res.choices.length) {
+      logger.debug(`No completion found for query: ${query} Response: ${JSON.stringify(res)}`, { res });
+      return { answer: "", tokenUsage: { input: 0, output: 0, total: 0 }, groundTruths };
+    }
+
     const answer = res.choices[0].message;
     if (answer && answer.content && res.usage) {
       return {

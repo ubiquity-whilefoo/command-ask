@@ -1,10 +1,8 @@
 name: Run Braintrust Evals
 
 on:
-  workflow_run:
-    workflows: ["Knip"]
-    types:
-      - completed
+  workflow_dispatch:
+  pull_request:
 
 permissions: write-all
 
@@ -19,7 +17,7 @@ jobs:
       VOYAGEAI_API_KEY: ${{ secrets.VOYAGEAI_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      UBIQUITY_OS_APP_NAME: "ubiquity-agent"  # Hardcoded value
+      UBIQUITY_OS_APP_NAME: "ubiquity-agent"
 
     steps:
       - uses: actions/setup-node@v4
@@ -43,7 +41,7 @@ jobs:
           VOYAGEAI_API_KEY: ${{ secrets.VOYAGEAI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          UBIQUITY_OS_APP_NAME: "ubiquity-agent"  # Hardcoded value
+          UBIQUITY_OS_APP_NAME: "ubiquity-agent"
 
       - name: Add Evals Report to Github Comment
         if: always()

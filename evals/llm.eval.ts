@@ -7,12 +7,10 @@ import { createClient } from "@supabase/supabase-js";
 import { createAdapters } from "../src/adapters";
 import { Context } from "../src/types/context";
 import { logger } from "../src/helpers/errors";
-import { Octokit } from "@octokit/rest";
+import { customOctokit as Octokit } from "@ubiquity-os/plugin-sdk/octokit";
 import issueTemplate from "../tests/__mocks__/issue-template";
 import { writeFileSync } from "fs";
 import { fetchContext, formattedHistory, initAdapters } from "./handlers/setup-context";
-
-console.log(process.env);
 
 // Required environment variables with type assertion
 const requiredEnvVars = {

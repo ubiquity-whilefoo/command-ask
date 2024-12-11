@@ -20,7 +20,6 @@ const requiredEnvVars = {
   SUPABASE_URL: process.env.SUPABASE_URL as string,
   SUPABASE_KEY: process.env.SUPABASE_KEY as string,
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY as string,
-  GITHUB_TOKEN: process.env.GITHUB_TOKEN as string,
 };
 
 // Validate all required env vars are present
@@ -88,88 +87,92 @@ const baseContext: Partial<Context> = {
   config: inputs.config,
   env: requiredEnvVars,
   logger,
-  octokit: new Octokit({ auth: requiredEnvVars.GITHUB_TOKEN }),
+  octokit: new Octokit({ auth: process.env.GITHUB_TOKEN }),
 };
 
 export const main = async () => {
-  const result = await Eval<EvalInput, EvalOutput, string, void, void>("Command Ask LLM", {
-    data: () => {
-      const responses = goldResponses.issueResponses as Scenario[];
-      return responses.map((scenario: Scenario) => {
-        return {
-          input: {
-            scenario,
+  const result = await Eval<EvalInput, EvalOutput, string, void, void>(
+    "Command Ask LLM",
+    {
+      data: () => {
+        const responses = goldResponses.issueResponses as Scenario[];
+        return responses.map((scenario: Scenario) => {
+          return {
+            input: {
+              scenario,
+            },
+            expected: scenario.expectedResponse,
+          };
+        });
+      },
+      task: async (input: EvalInput) => {
+        const { scenario } = input;
+        let initialContext: Context = {
+          ...baseContext,
+          adapters: {} as ReturnType<typeof createAdapters>,
+          payload: {
+            issue: {
+              ...issueTemplate,
+              body: scenario.issue.body,
+              html_url: scenario.issue.html_url,
+              number: scenario.issue.number,
+            } as unknown as Context["payload"]["issue"],
+            sender: scenario.sender,
+            repository: {
+              name: scenario.repository.name,
+              owner: {
+                login: scenario.repository.owner.login,
+              },
+            },
+            comment: {
+              body: scenario.issue.question,
+              user: scenario.sender,
+            } as unknown as Context["payload"]["comment"],
+            action: "created" as string,
+            installation: { id: 1 } as unknown as Context["payload"]["installation"],
+            organization: { login: "ubiquity" } as unknown as Context["payload"]["organization"],
           },
+          eventName: "issue_comment.created",
+        } as Context;
+
+        initialContext = initAdapters(initialContext, clients);
+        const chatHistory = await fetchContext(initialContext, scenario.issue.question);
+        const formattedContextHistory = formattedHistory(chatHistory);
+        const result = await initialContext.adapters.openai.completions.createCompletion(
+          scenario.issue.question,
+          initialContext.config.model || "gpt-4o",
+          chatHistory.rerankedText,
+          chatHistory.formattedChat,
+          chatHistory.groundTruths,
+          initialContext.env.UBIQUITY_OS_APP_NAME,
+          initialContext.config.maxTokens
+        );
+
+        return {
+          output: result.answer,
+          context: formattedContextHistory,
           expected: scenario.expectedResponse,
         };
-      });
+      },
+      scores: [
+        (args) =>
+          Levenshtein({
+            output: args.output.output,
+            expected: args.expected,
+          }),
+        (args) =>
+          ContextPrecision({
+            input: args.input.scenario.issue.question,
+            output: args.output.output,
+            context: args.output.context,
+            expected: args.expected,
+            openAiApiKey: requiredEnvVars.OPENROUTER_API_KEY,
+            openAiBaseUrl: inputs.settings.openAiBaseUrl,
+          }),
+      ],
     },
-    task: async (input: EvalInput) => {
-      const { scenario } = input;
-      let initialContext: Context = {
-        ...baseContext,
-        adapters: {} as ReturnType<typeof createAdapters>,
-        payload: {
-          issue: {
-            ...issueTemplate,
-            body: scenario.issue.body,
-            html_url: scenario.issue.html_url,
-            number: scenario.issue.number,
-          } as unknown as Context["payload"]["issue"],
-          sender: scenario.sender,
-          repository: {
-            name: scenario.repository.name,
-            owner: {
-              login: scenario.repository.owner.login,
-            },
-          },
-          comment: {
-            body: scenario.issue.question,
-            user: scenario.sender,
-          } as unknown as Context["payload"]["comment"],
-          action: "created" as string,
-          installation: { id: 1 } as unknown as Context["payload"]["installation"],
-          organization: { login: "ubiquity" } as unknown as Context["payload"]["organization"],
-        },
-        eventName: "issue_comment.created",
-      } as Context;
-
-      initialContext = initAdapters(initialContext, clients);
-      const chatHistory = await fetchContext(initialContext, scenario.issue.question);
-      const formattedContextHistory = formattedHistory(chatHistory);
-      const result = await initialContext.adapters.openai.completions.createCompletion(
-        scenario.issue.question,
-        initialContext.config.model || "gpt-4o",
-        chatHistory.rerankedText,
-        chatHistory.formattedChat,
-        chatHistory.groundTruths,
-        initialContext.env.UBIQUITY_OS_APP_NAME,
-        initialContext.config.maxTokens
-      );
-
-      return {
-        output: result.answer,
-        context: formattedContextHistory,
-        expected: scenario.expectedResponse,
-      };
-    },
-    scores: [
-      (args) =>
-        Levenshtein({
-          output: args.output.output,
-          expected: args.expected,
-        }),
-      (args) =>
-        ContextPrecision({
-          input: args.input.scenario.issue.question,
-          output: args.output.output,
-          context: args.output.context,
-          expected: args.expected,
-          openAiApiKey: requiredEnvVars.OPENROUTER_API_KEY,
-          openAiBaseUrl: inputs.settings.openAiBaseUrl,
-        }),
-    ],
-  });
+    {}
+  );
 
   const scores = result.summary.scores || {};
   const metrics = result.summary.metrics || {};

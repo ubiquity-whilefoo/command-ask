@@ -6,7 +6,6 @@ on:
     types:
       - completed
 
-
 permissions: write-all
 
 jobs:

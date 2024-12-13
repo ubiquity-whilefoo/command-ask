@@ -86,6 +86,8 @@ const clients = {
 const baseContext: Partial<Context> = {
   config: inputs.config,
   env: requiredEnvVars,
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore: Logger type conflict workaround (Two different types with this name exist, but they are unrelated)
   logger: new Logs(LOG_LEVEL.DEBUG),
   octokit: new Octokit({ auth: process.env.GITHUB_TOKEN }),
 };

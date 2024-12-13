@@ -90,7 +90,7 @@ const baseContext: Partial<Context> = {
   octokit: new Octokit({ auth: process.env.GITHUB_TOKEN }),
 };
 
-export const main = async () => {
+export async function main() {
   const result = await Eval<EvalInput, EvalOutput, string, void, void>(
     "Command Ask LLM",
     {
@@ -178,18 +178,18 @@ export const main = async () => {
   const metrics = result.summary.metrics || {};
 
   // Helper function to format diff with arrow
-  const formatDiff = (value: number | undefined, isTime = false) => {
+  function formatDiff(value: number | undefined, isTime = false) {
     if (value === undefined) return "-";
     const arrow = value > 0 ? "↑" : "↓";
     const formatted = isTime ? Math.abs(value).toFixed(2) + "s" : Math.abs(value).toFixed(4);
     return `${arrow} ${formatted}`;
-  };
+  }
 
   // Helper function to get status emoji
-  const getStatus = (regressions: number | undefined) => {
+  function getStatus(regressions: number | undefined) {
     if (regressions === undefined) return "❓";
     return regressions > 0 ? "⚠️" : "✅";
-  };
+  }
 
   // Write results as markdown table
   const markdown = `## Evaluation Results
@@ -201,6 +201,6 @@ export const main = async () => {
 | Duration | ${metrics.duration?.metric.toFixed(2) || "-"}s | ${formatDiff(metrics.duration?.diff, true)} | ${getStatus(metrics.duration?.regressions)} |
 | Cost | $${metrics.estimated_cost?.metric.toFixed(6) || "-"} | ${formatDiff(metrics.estimated_cost?.diff)} | ${getStatus(metrics.estimated_cost?.regressions)} |`;
   writeFileSync("eval-results.md", markdown);
-};
+}
 
 void main();

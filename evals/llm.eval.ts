@@ -6,11 +6,11 @@ import { VoyageAIClient } from "voyageai";
 import { createClient } from "@supabase/supabase-js";
 import { createAdapters } from "../src/adapters";
 import { Context } from "../src/types/context";
-import { logger } from "../src/helpers/errors";
 import { customOctokit as Octokit } from "@ubiquity-os/plugin-sdk/octokit";
 import issueTemplate from "../tests/__mocks__/issue-template";
 import { writeFileSync } from "fs";
 import { fetchContext, formattedHistory, initAdapters } from "./handlers/setup-context";
+import { LOG_LEVEL, Logs } from "@ubiquity-os/ubiquity-os-logger";
 
 // Required environment variables with type assertion
 const requiredEnvVars = {
@@ -86,7 +86,7 @@ const clients = {
 const baseContext: Partial<Context> = {
   config: inputs.config,
   env: requiredEnvVars,
-  logger,
+  logger: new Logs(LOG_LEVEL.DEBUG),
   octokit: new Octokit({ auth: process.env.GITHUB_TOKEN }),
 };
 

@@ -31,18 +31,22 @@ export async function formatChatHistory(
         logger.error(`Ran out of tokens at block ${i}`);
         return "";
       }
-      const [currentTokenCount, result] = await createContextBlockSection({
-        context,
-        key,
-        streamlined,
-        specAndBodies,
-        isCurrentIssue: key === createKey(context.payload.issue.html_url),
-        tokenLimits,
-      });
-      // update the token count
-      tokenLimits.runningTokenCount = currentTokenCount;
-      tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens - currentTokenCount;
-      return result;
+      try {
+        const [currentTokenCount, result] = await createContextBlockSection({
+          context,
+          key,
+          streamlined,
+          specAndBodies,
+          isCurrentIssue: key === createKey(context.payload.issue.html_url),
+          tokenLimits,
+        });
+        // update the token count
+        tokenLimits.runningTokenCount = currentTokenCount;
+        tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens - currentTokenCount;
+        return result;
+      } catch (error) {
+        logger.error(`Error creating context block for ${key}: ${error}`);
+      }
     })
   );
 

@@ -1,5 +1,6 @@
 import { RestEndpointMethodTypes } from "@octokit/rest";
 import { Context } from "./context";
+import { StreamlinedComment } from "./llm";
 
 type BaseIssue = RestEndpointMethodTypes["issues"]["get"]["response"]["data"];
 export interface Issue extends BaseIssue {
@@ -90,6 +91,7 @@ export interface LinkedIssues {
   body: string | undefined | null;
   prDetails?: PullRequestDetails;
   readme?: string;
+  referenceType?: "closing" | "depends" | "direct";
 }
 
 export type SimplifiedComment = {
@@ -110,3 +112,43 @@ export type FetchedCodes = {
   repo: string;
   issueNumber: number;
 };
+
+export interface TreeNode {
+  issue: LinkedIssues;
+  children: string[];
+  depth: number;
+  parent?: string;
+  status: "pending" | "processed" | "error";
+  errorReason?: string;
+  metadata: {
+    processedAt: Date;
+    fetchDuration?: number;
+    commentCount: number;
+    linkedIssuesCount: number;
+    hasCodeReferences: boolean;
+  };
+}
+
+export interface TreeProcessingQueue {
+  key: string;
+  depth: number;
+  parent?: string;
+  priority: number;
+}
+
+export interface ProcessingContext {
+  params: FetchParams;
+  issueTree: Record<string, TreeNode>;
+  seen: Set<string>;
+  processingQueue: TreeProcessingQueue[];
+  linkedIssues: LinkedIssues[];
+  specAndBodies: Record<string, string>;
+  streamlinedComments: Record<string, StreamlinedComment[]>;
+  maxDepth: number;
+}
+
+export interface CommentProcessingResult {
+  processedComments: number;
+  linkedIssues: LinkedIssues[];
+  hasCodeReferences: boolean;
+}

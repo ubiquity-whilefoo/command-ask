@@ -1,5 +1,5 @@
 import { Context } from "../types";
-import { FetchParams, Issue, LinkedIssues, SimplifiedComment, PullRequestDetails } from "../types/github-types";
+import { FetchParams, Issue, LinkedIssues, SimplifiedComment, PullRequestDetails, TreeNode } from "../types/github-types";
 import { StreamlinedComment, TokenLimits } from "../types/llm";
 import { fetchCodeLinkedFromIssue, idIssueFromComment, mergeStreamlinedComments } from "./issue";
 import { handleSpec } from "./issue-handling";
@@ -150,55 +150,61 @@ export interface RecursiveIssueSearchResult {
   >;
 }
 
+function createTreeNode(issue: Issue, params: FetchParams, depth: number): TreeNode {
+  return {
+    issue: {
+      body: issue.body || "",
+      owner: params.owner || params.context.payload.repository.owner.login,
+      repo: params.repo || params.context.payload.repository.name,
+      issueNumber: params.issueNum || params.context.payload.issue.number,
+      url: issue.html_url,
+      comments: [],
+      prDetails: issue.prDetails,
+    },
+    children: [],
+    depth,
+    status: "pending",
+    metadata: {
+      processedAt: new Date(),
+      commentCount: 0,
+      linkedIssuesCount: 0,
+      hasCodeReferences: false,
+    },
+  };
+}
+
 export async function recursivelyFetchLinkedIssues(params: FetchParams): Promise<RecursiveIssueSearchResult> {
   const maxDepth = params.maxDepth || 15;
-  const _currentDepth = params.currentDepth || 0;
 
-  // Initialize tree structure with main issue as root
-  const issueTree: Record<
-    string,
-    {
-      issue: EnhancedLinkedIssues;
-      children: string[];
-      depth: number;
-      parent?: string;
-    }
-  > = {};
+  const issueTree: Record<string, TreeNode> = {};
+  const seen = new Set<string>();
+  const linkedIssues: LinkedIssues[] = [];
+  const specAndBodies: Record<string, string> = {};
+  const streamlinedComments: Record<string, StreamlinedComment[]> = {};
 
-  // Fetch the main issue first
+  // Initialize with main issue
   const mainIssue = await fetchIssue(params);
   if (!mainIssue) {
     return { linkedIssues: [], specAndBodies: {}, streamlinedComments: {}, issueTree };
   }
 
-  // Create the root node for the main issue
-  const mainIssueKey = `${params.owner || params.context.payload.repository.owner.login}/${params.repo || params.context.payload.repository.name}/${params.issueNum || params.context.payload.issue.number}`;
+  const mainIssueKey = `${params.owner || params.context.payload.repository.owner.login}/${
+    params.repo || params.context.payload.repository.name
+  }/${params.issueNum || params.context.payload.issue.number}`;
 
-  // Get comments and linked issues for the main issue/PR
+  // Initialize root node
+  issueTree[mainIssueKey] = createTreeNode(mainIssue, params, 0);
+  seen.add(mainIssueKey);
+  linkedIssues.push(issueTree[mainIssueKey].issue);
+
+  // Get initial comments and linked issues
   const { comments, linkedIssues: initialLinkedIssues } = await fetchIssueComments(params);
-
-  issueTree[mainIssueKey] = {
-    issue: {
-      body: mainIssue.body || "",
-      owner: params.owner || params.context.payload.repository.owner.login,
-      repo: params.repo || params.context.payload.repository.name,
-      issueNumber: params.issueNum || params.context.payload.issue.number,
-      url: mainIssue.html_url,
-      comments,
-      prDetails: mainIssue.prDetails,
-    },
-    children: [],
-    depth: 0,
-  };
-
-  // Process all comments to find linked issues
-  const linkedIssues: LinkedIssues[] = [issueTree[mainIssueKey].issue];
-  const specAndBodies: Record<string, string> = {};
-  const seen = new Set<string>([mainIssueKey]);
-  const streamlinedComments: Record<string, StreamlinedComment[]> = {};
+  if (comments) {
+    issueTree[mainIssueKey].issue.comments = comments;
+  }
 
   // Add initial linked issues from PR if any
-  if (initialLinkedIssues.length > 0) {
+  if (initialLinkedIssues && initialLinkedIssues.length > 0) {
     for (const linkedIssue of initialLinkedIssues) {
       const linkedKey = `${linkedIssue.owner}/${linkedIssue.repo}/${linkedIssue.issueNumber}`;
       if (!seen.has(linkedKey)) {
@@ -210,6 +216,13 @@ export async function recursivelyFetchLinkedIssues(params: FetchParams): Promise
           children: [],
           depth: 1,
           parent: mainIssueKey,
+          status: "pending",
+          metadata: {
+            processedAt: new Date(),
+            commentCount: linkedIssue.comments?.length || 0,
+            linkedIssuesCount: 0,
+            hasCodeReferences: false,
+          },
         };
       }
     }
@@ -258,7 +271,6 @@ export async function recursivelyFetchLinkedIssues(params: FetchParams): Promise
 
           if (!fetchedIssue || !fetchedIssue.body) continue;
 
-          // Add to tree structure
           issueTree[foundKey] = {
             issue: {
               body: fetchedIssue.body,
@@ -272,6 +284,13 @@ export async function recursivelyFetchLinkedIssues(params: FetchParams): Promise
             children: [],
             depth: current.depth + 1,
             parent: current.key,
+            status: "pending",
+            metadata: {
+              processedAt: new Date(),
+              commentCount: fetchedComments?.length || 0,
+              linkedIssuesCount: 0,
+              hasCodeReferences: false,
+            },
           };
           issueTree[current.key].children.push(foundKey);
 

@@ -1,6 +1,6 @@
 import { Context } from "../types";
 import { StreamlinedComment, TokenLimits } from "../types/llm";
-import { fetchIssue, fetchLinkedIssues } from "./issue-fetching";
+import { fetchIssue, recursivelyFetchLinkedIssues } from "./issue-fetching";
 import { splitKey } from "./issue";
 import { logger } from "./errors";
 import { Issue, LinkedIssues } from "../types/github-types";
@@ -19,10 +19,13 @@ interface TreeNode {
   readmeSection?: string;
 }
 
-function updateTokenCount(text: string, tokenLimits: TokenLimits): void {
+function updateTokenCount(text: string, tokenLimits: TokenLimits): boolean {
   const tokenCount = encode(text, { disallowedSpecial: new Set() }).length;
+  if (tokenLimits.runningTokenCount + tokenCount > tokenLimits.tokensRemaining) {
+    return false;
+  }
   tokenLimits.runningTokenCount += tokenCount;
-  tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens - tokenLimits.runningTokenCount;
+  return true;
 }
 
 function validateGitHubKey(key: string): boolean {
@@ -144,15 +147,13 @@ async function buildTree(
     return { tree: null, linkedIssues: [] };
   }
 
-  const { linkedIssues } = await fetchLinkedIssues(
-    {
-      context,
-      owner: context.payload.repository.owner.login,
-      repo: context.payload.repository.name,
-      issueNum: context.payload.issue.number,
-    },
-    tokenLimits
-  );
+  const { linkedIssues } = await recursivelyFetchLinkedIssues({
+    context,
+    owner: context.payload.repository.owner.login,
+    repo: context.payload.repository.name,
+    issueNum: context.payload.issue.number,
+    maxDepth: maxDepth,
+  });
 
   async function createNode(key: string, depth: number = 0): Promise<TreeNode | null> {
     if (depth > maxDepth || processingStack.has(key)) {
@@ -257,101 +258,53 @@ async function buildTree(
 }
 
 async function processTreeNode(node: TreeNode, prefix: string, output: string[], tokenLimits: TokenLimits, linkedIssues?: LinkedIssues[]): Promise<void> {
-  const isPullRequest = node.issue.pull_request;
-  const typeStr = isPullRequest ? "PR" : "Issue";
-  const numberStr = `#${node.issue.number}`;
-  const urlStr = `(${node.issue.html_url})`;
+  // Create header
+  const typeStr = node.issue.pull_request ? "PR" : "Issue";
+  const headerLine = `${prefix}${node.parent ? "└── " : ""}${typeStr} #${node.issue.number} (${node.issue.html_url})`;
 
-  // Check token limit before adding this node
-  const headerLine = `${prefix}${node.parent ? "└── " : ""}${typeStr} ${numberStr} ${urlStr}`;
-  const headerTokens = encode(headerLine, { disallowedSpecial: new Set() }).length;
-
-  if (tokenLimits.runningTokenCount + headerTokens > tokenLimits.tokensRemaining) {
-    return; // Stop here if we can't add even the header
+  if (!updateTokenCount(headerLine, tokenLimits)) {
+    return;
   }
-
-  updateTokenCount(headerLine, tokenLimits);
   output.push(headerLine);
 
   const childPrefix = prefix + (node.parent ? "    " : "");
   const contentPrefix = childPrefix + "    ";
 
-  if (node.body) {
-    const bodyHeader = `${childPrefix}Body:`;
-    const bodyHeaderTokens = encode(bodyHeader, { disallowedSpecial: new Set() }).length;
-
-    if (tokenLimits.runningTokenCount + bodyHeaderTokens <= tokenLimits.tokensRemaining) {
-      updateTokenCount(bodyHeader, tokenLimits);
-      output.push(bodyHeader);
-
-      const bodyLines = node.body.trim().split("\n");
-      for (const line of bodyLines) {
-        if (line.trim()) {
-          const formattedLine = `${contentPrefix}${line.trim()}`;
-          const lineTokens = encode(formattedLine, { disallowedSpecial: new Set() }).length;
-
-          if (tokenLimits.runningTokenCount + lineTokens > tokenLimits.tokensRemaining) {
-            break; // Stop adding body lines if we hit the limit
-          }
-
-          updateTokenCount(formattedLine, tokenLimits);
-          output.push(formattedLine);
-        }
-      }
+  // Process body if exists and within token limits
+  if (node.body?.trim()) {
+    const bodyContent = formatContent("Body", node.body, childPrefix, contentPrefix, tokenLimits);
+    if (bodyContent.length > 0) {
+      output.push(...bodyContent);
       output.push("");
     }
   }
 
-  // Add README section for the main issue (no parent)
+  // Process README for root node
   if (!node.parent && linkedIssues?.[0]?.readme) {
-    const readmeHeader = `${childPrefix}README:`;
-    const readmeHeaderTokens = encode(readmeHeader, { disallowedSpecial: new Set() }).length;
-
-    if (tokenLimits.runningTokenCount + readmeHeaderTokens <= tokenLimits.tokensRemaining) {
-      updateTokenCount(readmeHeader, tokenLimits);
-      output.push(readmeHeader);
-
-      const readmeLines = linkedIssues[0].readme.trim().split("\n");
-      for (const line of readmeLines) {
-        if (line.trim()) {
-          const formattedLine = `${contentPrefix}${line.trim()}`;
-          const lineTokens = encode(formattedLine, { disallowedSpecial: new Set() }).length;
-
-          if (tokenLimits.runningTokenCount + lineTokens > tokenLimits.tokensRemaining) {
-            break; // Stop adding readme lines if we hit the limit
-          }
-
-          updateTokenCount(formattedLine, tokenLimits);
-          output.push(formattedLine);
-        }
-      }
+    const readmeContent = formatContent("README", linkedIssues[0].readme, childPrefix, contentPrefix, tokenLimits);
+    if (readmeContent.length > 0) {
+      output.push(...readmeContent);
       output.push("");
     }
   }
 
-  if (node.comments && node.comments.length > 0) {
+  // Process comments if any
+  if (node.comments?.length) {
     const commentsHeader = `${childPrefix}Comments: ${node.comments.length}`;
-    const headerTokens = encode(commentsHeader, { disallowedSpecial: new Set() }).length;
-
-    if (tokenLimits.runningTokenCount + headerTokens <= tokenLimits.tokensRemaining) {
-      updateTokenCount(commentsHeader, tokenLimits);
+    if (updateTokenCount(commentsHeader, tokenLimits)) {
       output.push(commentsHeader);
 
       for (let i = 0; i < node.comments.length; i++) {
         const comment = node.comments[i];
-        if (comment.body) {
-          const isLast = i === node.comments.length - 1;
-          const commentPrefix = isLast ? "└── " : "├── ";
-          const commentLine = `${childPrefix}${commentPrefix}issuecomment-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
-          const commentTokens = encode(commentLine, { disallowedSpecial: new Set() }).length;
+        if (!comment.body?.trim()) continue;
 
-          if (tokenLimits.runningTokenCount + commentTokens > tokenLimits.tokensRemaining) {
-            break; // Stop adding comments if we hit the limit
-          }
+        const commentPrefix = i === node.comments.length - 1 ? "└── " : "├── ";
+        const commentLine = `${childPrefix}${commentPrefix}issuecomment-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
 
-          updateTokenCount(commentLine, tokenLimits);
-          output.push(commentLine);
+        if (!updateTokenCount(commentLine, tokenLimits)) {
+          break;
         }
+        output.push(commentLine);
       }
       output.push("");
     }
@@ -362,17 +315,31 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
     const child = node.children[i];
     const isLast = i === node.children.length - 1;
     const nextPrefix = childPrefix + (isLast ? "    " : "│   ");
-
-    // Check if we have enough tokens for at least the child's header
-    const childHeaderLine = `${nextPrefix}${child.parent ? "└── " : ""}${child.issue.pull_request ? "PR" : "Issue"} #${child.issue.number} (${child.issue.html_url})`;
-    const childHeaderTokens = encode(childHeaderLine, { disallowedSpecial: new Set() }).length;
-
-    if (tokenLimits.runningTokenCount + childHeaderTokens > tokenLimits.tokensRemaining) {
-      break; // Stop processing children if we can't even add their headers
-    }
-
     await processTreeNode(child, nextPrefix, output, tokenLimits, linkedIssues);
   }
+}
+
+function formatContent(type: string, content: string, prefix: string, contentPrefix: string, tokenLimits: TokenLimits): string[] {
+  const output: string[] = [];
+  const header = `${prefix}${type}:`;
+
+  if (!updateTokenCount(header, tokenLimits)) {
+    return output;
+  }
+  output.push(header);
+
+  const lines = content.trim().split("\n");
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    const formattedLine = `${contentPrefix}${line.trim()}`;
+    if (!updateTokenCount(formattedLine, tokenLimits)) {
+      break;
+    }
+    output.push(formattedLine);
+  }
+
+  return output;
 }
 
 export async function formatChatHistory(
@@ -381,29 +348,27 @@ export async function formatChatHistory(
   specAndBodies: Record<string, string>,
   maxDepth: number = 2
 ): Promise<string[]> {
-  const tokenLimits: TokenLimits = {
-    modelMaxTokenLimit: context.adapters.openai.completions.getModelMaxTokenLimit(context.config.model),
-    maxCompletionTokens: context.config.maxTokens || context.adapters.openai.completions.getModelMaxOutputLimit(context.config.model),
-    runningTokenCount: 0,
-    tokensRemaining: 0,
-  };
+  const modelMaxTokenLimit = context.adapters.openai.completions.getModelMaxTokenLimit(context.config.model);
+  const maxCompletionTokens = context.config.maxTokens || context.adapters.openai.completions.getModelMaxOutputLimit(context.config.model);
 
-  tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens;
+  const tokenLimits: TokenLimits = {
+    modelMaxTokenLimit,
+    maxCompletionTokens,
+    runningTokenCount: 0,
+    tokensRemaining: modelMaxTokenLimit - maxCompletionTokens,
+  };
 
   const { tree, linkedIssues } = await buildTree(context, streamlined, specAndBodies, tokenLimits, maxDepth);
   if (!tree) {
     return ["No main issue found."];
   }
 
-  // Reset token count before processing tree for output
-  tokenLimits.runningTokenCount = 0;
-  tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens;
-
   const treeOutput: string[] = [];
   const headerLine = "Issue Tree Structure:";
-  updateTokenCount(headerLine, tokenLimits);
-  treeOutput.push(headerLine);
-  treeOutput.push("");
+
+  if (updateTokenCount(headerLine, tokenLimits)) {
+    treeOutput.push(headerLine, "");
+  }
 
   await processTreeNode(tree, "", treeOutput, tokenLimits, linkedIssues);
   logger.info(`Final token count: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining} tokens used`);

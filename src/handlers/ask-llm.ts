@@ -9,13 +9,16 @@ import { findGroundTruths } from "./ground-truths/find-ground-truths";
 import { bubbleUpErrorComment, logger } from "../helpers/errors";
 
 export async function askQuestion(context: Context, question: string) {
+  const {
+    config: { maxDepth },
+  } = context;
   if (!question) {
     throw logger.error("No question provided");
   }
   // using any links in comments or issue/pr bodies to fetch more context
   const { specAndBodies, streamlinedComments } = await recursivelyFetchLinkedIssues({
     context,
-    maxDepth: 2,
+    maxDepth,
     owner: context.payload.repository.owner.login,
     repo: context.payload.repository.name,
     issueNum: context.payload.issue.number,

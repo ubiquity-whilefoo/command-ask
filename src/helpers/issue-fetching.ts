@@ -135,7 +135,22 @@ export async function fetchIssueComments(params: FetchParams, tokenLimits?: Toke
   return { issue, comments, linkedIssues };
 }
 
-export async function recursivelyFetchLinkedIssues(params: FetchParams) {
+export interface RecursiveIssueSearchResult {
+  linkedIssues: LinkedIssues[];
+  specAndBodies: Record<string, string>;
+  streamlinedComments: Record<string, StreamlinedComment[]>;
+  issueTree: Record<
+    string,
+    {
+      issue: EnhancedLinkedIssues;
+      children: string[];
+      depth: number;
+      parent?: string;
+    }
+  >;
+}
+
+export async function recursivelyFetchLinkedIssues(params: FetchParams): Promise<RecursiveIssueSearchResult> {
   const maxDepth = params.maxDepth || 15;
   const _currentDepth = params.currentDepth || 0;
 
@@ -153,7 +168,7 @@ export async function recursivelyFetchLinkedIssues(params: FetchParams) {
   // Fetch the main issue first
   const mainIssue = await fetchIssue(params);
   if (!mainIssue) {
-    return { linkedIssues: [], specAndBodies: {}, streamlinedComments: {} };
+    return { linkedIssues: [], specAndBodies: {}, streamlinedComments: {}, issueTree };
   }
 
   // Create the root node for the main issue

@@ -1,5 +1,5 @@
 import { createKey } from "../handlers/comments";
-import { FetchParams, User } from "../types/github-types";
+import { FetchParams, User, LinkedIssues } from "../types/github-types";
 import { StreamlinedComment, TokenLimits } from "../types/llm";
 import {
   idIssueFromComment,
@@ -10,8 +10,10 @@ import {
   pullReadmeFromRepoForIssue,
   fetchLinkedIssuesFromComment,
 } from "./issue";
-import { fetchLinkedIssues, fetchIssue, mergeCommentsAndFetchSpec } from "./issue-fetching";
+import { recursivelyFetchLinkedIssues, fetchIssue, mergeCommentsAndFetchSpec } from "./issue-fetching";
 import { encode } from "gpt-tokenizer";
+
+const UNKNOWN_ERROR = "An unknown error occurred during promise throttling";
 
 function createStreamlinedComment(params: {
   id: string | number;
@@ -22,7 +24,7 @@ function createStreamlinedComment(params: {
   issueUrl: string;
 }): StreamlinedComment {
   return {
-    id: typeof params.id === "string" ? parseInt(params.id.replace(/\D/g, "")) : params.id,
+    id: params.id,
     user: typeof params.user === "string" ? params.user : params.user?.login,
     body: params.body,
     org: params.org,
@@ -46,96 +48,134 @@ function createDefaultTokenLimits(params: FetchParams): TokenLimits {
   };
 }
 
+interface CodeSnippet {
+  id: string;
+  body?: string;
+  org: string;
+  repo: string;
+  issueUrl: string;
+}
+
+async function throttlePromises(promises: Promise<void>[], limit: number): Promise<void> {
+  const executing = new Set<Promise<void>>();
+  const allPromises: Promise<void>[] = [];
+
+  try {
+    for (const promise of promises) {
+      const wrappedPromise = Promise.resolve(promise).finally(() => {
+        executing.delete(wrappedPromise);
+      });
+
+      // Add to our sets
+      executing.add(wrappedPromise);
+      allPromises.push(wrappedPromise);
+
+      // If we're at the limit, wait for one to finish
+      if (executing.size >= limit) {
+        await Promise.race(Array.from(executing));
+      }
+    }
+
+    // Wait for all promises to complete
+    await Promise.all(allPromises);
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("An unknown error occurred during promise throttling");
+  }
+}
+
 export async function handleIssue(
   params: FetchParams,
   streamlinedComments: Record<string, StreamlinedComment[]>,
   alreadySeen: Set<string>,
   parentKey?: string,
   tokenLimits?: TokenLimits
-) {
+): Promise<Record<string, StreamlinedComment[]> | void> {
   const currentKey = `${params.owner}/${params.repo}/${params.issueNum}`;
   if (alreadySeen.has(currentKey)) {
     return;
   }
 
-  // Mark this issue as seen
-  alreadySeen.add(currentKey);
+  try {
+    // Mark this issue as seen
+    alreadySeen.add(currentKey);
 
-  const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params);
+    const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params);
 
-  const {
-    linkedIssues,
-    seen,
-    specAndBodies,
-    streamlinedComments: streamlined,
-  } = await fetchLinkedIssues(
-    {
+    const {
+      linkedIssues = [] as LinkedIssues[],
+      specAndBodies,
+      streamlinedComments: fetchedComments = Object.create(null) as Record<string, StreamlinedComment[]>,
+      issueTree,
+    } = await recursivelyFetchLinkedIssues({
       ...params,
       parentIssueKey: parentKey,
-    },
-    currentTokenLimits
-  );
+    });
 
-  // Only fetch similar issues and README for the main issue (no parent key)
-  if (!parentKey) {
-    const issueBody = params.context.payload.issue?.body || "";
-    const similarIssues = await fetchSimilarIssues(params.context, issueBody);
-    const readmeSection = await pullReadmeFromRepoForIssue(params);
+    // Get seen keys from issueTree
+    const seen = new Set(Object.keys(issueTree || {}));
 
-    params.context.logger.info(`Fetched ${similarIssues.length} similar issues and README section for ${currentKey}`);
+    // Only fetch similar issues and README for the main issue (no parent key)
+    if (!parentKey) {
+      const issueBody = params.context.payload.issue?.body || "";
+      const similarIssues = await fetchSimilarIssues(params.context, issueBody);
+      const readmeSection = await pullReadmeFromRepoForIssue(params);
 
-    // Fetch Similar Comments
-    const similarIssuesFromComment = await fetchLinkedIssuesFromComment(params.context, issueBody, params);
+      params.context.logger.info(`Fetched ${similarIssues.length} similar issues and README section for ${currentKey}`);
 
-    // Add similar issues at the 0th level
-    linkedIssues.push(...similarIssues, ...similarIssuesFromComment);
+      // Fetch Similar Comments
+      const similarIssuesFromComment = await fetchLinkedIssuesFromComment(params.context, issueBody, params);
 
-    // Add README content as a top-level comment if relevant
-    if (readmeSection) {
-      updateTokenCount(readmeSection, currentTokenLimits);
+      // Add similar issues at the 0th level
+      linkedIssues.push(...similarIssues, ...similarIssuesFromComment);
 
-      if (!streamlined[currentKey]) {
-        streamlined[currentKey] = [];
+      // Add README content as a top-level comment if relevant
+      if (readmeSection) {
+        updateTokenCount(readmeSection, currentTokenLimits);
+
+        if (!fetchedComments[currentKey]) {
+          fetchedComments[currentKey] = [];
+        }
+
+        fetchedComments[currentKey].push(
+          createStreamlinedComment({
+            id: "readme-section",
+            body: `Relevant README section:\n${readmeSection}`,
+            user: params.context.payload.sender,
+            org: params.owner || "",
+            repo: params.repo || "",
+            issueUrl: params.context.payload.issue?.html_url || "",
+          })
+        );
       }
+    }
 
-      streamlined[currentKey].push(
-        createStreamlinedComment({
-          id: "readme-section",
-          body: `Relevant README section:\n${readmeSection}`,
-          user: params.context.payload.sender,
-          org: params.owner || "",
-          repo: params.repo || "",
-          issueUrl: params.context.payload.issue?.html_url || "",
-        })
+    // Merge seen keys to maintain global reference tracking
+    seen.forEach((seenKey) => alreadySeen.add(seenKey));
+
+    // Process each linked issue while maintaining the relationship to the current issue
+    const fetchPromises = linkedIssues.map(async (linkedIssue: LinkedIssues) => {
+      const linkedKey = createKey(linkedIssue.url, linkedIssue.issueNumber);
+      if (alreadySeen.has(linkedKey)) {
+        return;
+      }
+      return await mergeCommentsAndFetchSpec(
+        {
+          ...params,
+          parentIssueKey: currentKey,
+        },
+        linkedIssue,
+        fetchedComments,
+        specAndBodies,
+        alreadySeen
       );
-    }
+    });
+
+    await throttlePromises(fetchPromises, 10);
+    return mergeStreamlinedComments(streamlinedComments, fetchedComments);
+  } catch (error) {
+    params.context.logger.error(`Error handling issue ${currentKey}: ${error instanceof Error ? error.message : UNKNOWN_ERROR}`);
+    throw error;
   }
-
-  // Merge seen sets to maintain global reference tracking
-  for (const seenKey of seen) {
-    alreadySeen.add(seenKey);
-  }
-
-  // Process each linked issue while maintaining the relationship to the current issue
-  const fetchPromises = linkedIssues.map(async (linkedIssue) => {
-    const linkedKey = createKey(linkedIssue.url, linkedIssue.issueNumber);
-    if (alreadySeen.has(linkedKey)) {
-      return;
-    }
-    return await mergeCommentsAndFetchSpec(
-      {
-        ...params,
-        parentIssueKey: currentKey,
-      },
-      linkedIssue,
-      streamlinedComments,
-      specAndBodies,
-      alreadySeen
-    );
-  });
-
-  await throttlePromises(fetchPromises, 10);
-  return mergeStreamlinedComments(streamlinedComments, streamlined);
 }
 
 export async function handleSpec(
@@ -146,48 +186,58 @@ export async function handleSpec(
   seen: Set<string>,
   streamlinedComments: Record<string, StreamlinedComment[]>,
   tokenLimits?: TokenLimits
-) {
+): Promise<Record<string, string>> {
   if (seen.has(key)) {
     return specAndBodies;
   }
 
-  const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params);
-  updateTokenCount(specOrBody, currentTokenLimits);
+  try {
+    const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params);
+    updateTokenCount(specOrBody, currentTokenLimits);
 
-  specAndBodies[key] = specOrBody;
-  const otherReferences = idIssueFromComment(specOrBody, params);
+    specAndBodies[key] = specOrBody;
+    const otherReferences = idIssueFromComment(specOrBody, params);
 
-  if (otherReferences) {
-    for (const ref of otherReferences) {
-      const anotherKey = `${ref.owner}/${ref.repo}/${ref.issueNumber}`;
-      if (seen.has(anotherKey)) {
-        continue;
-      }
+    if (otherReferences) {
+      for (const ref of otherReferences) {
+        const anotherKey = `${ref.owner}/${ref.repo}/${ref.issueNumber}`;
+        if (seen.has(anotherKey)) {
+          continue;
+        }
 
-      seen.add(anotherKey);
-      const issue = await fetchIssue(
-        {
-          ...params,
-          owner: ref.owner,
-          repo: ref.repo,
-          issueNum: ref.issueNumber,
-        },
-        currentTokenLimits
-      );
+        try {
+          seen.add(anotherKey);
+          const issue = await fetchIssue(
+            {
+              ...params,
+              owner: ref.owner,
+              repo: ref.repo,
+              issueNum: ref.issueNumber,
+            },
+            currentTokenLimits
+          );
 
-      if (!issue?.body) {
-        continue;
-      }
+          if (!issue?.body) {
+            params.context.logger.error(`No body found for issue ${anotherKey}`);
+            continue;
+          }
 
-      updateTokenCount(issue.body, currentTokenLimits);
-      specAndBodies[anotherKey] = issue.body;
+          updateTokenCount(issue.body, currentTokenLimits);
+          specAndBodies[anotherKey] = issue.body;
 
-      if (!streamlinedComments[anotherKey]) {
-        await handleIssue({ ...params, owner: ref.owner, repo: ref.repo, issueNum: ref.issueNumber }, streamlinedComments, seen, key, currentTokenLimits);
+          if (!streamlinedComments[anotherKey]) {
+            await handleIssue({ ...params, owner: ref.owner, repo: ref.repo, issueNum: ref.issueNumber }, streamlinedComments, seen, key, currentTokenLimits);
+          }
+        } catch (error) {
+          params.context.logger.error(`Error fetching issue ${anotherKey}: ${error instanceof Error ? error.message : UNKNOWN_ERROR}`);
+        }
       }
     }
+    return specAndBodies;
+  } catch (error) {
+    params.context.logger.error(`Error handling spec for ${key}: ${error instanceof Error ? error.message : UNKNOWN_ERROR}`);
+    throw error;
   }
-  return specAndBodies;
 }
 
 export async function handleComment(
@@ -197,54 +247,70 @@ export async function handleComment(
   seen: Set<string>,
   parentKey: string,
   tokenLimits?: TokenLimits
-) {
-  const commentBody = comment.body || "";
-  const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params);
+): Promise<void> {
+  try {
+    const commentBody = comment.body || "";
+    const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params);
 
-  updateTokenCount(commentBody, currentTokenLimits);
+    updateTokenCount(commentBody, currentTokenLimits);
 
-  const otherReferences = idIssueFromComment(commentBody, params);
+    const otherReferences = idIssueFromComment(commentBody, params);
 
-  // Only fetch code snippets for comments (no similar issues)
-  const codeSnippets = await fetchCodeLinkedFromIssue(commentBody, params.context, comment.issueUrl);
-
-  // Add code snippets as comments if found
-  if (codeSnippets.length > 0) {
-    const commentKey = `${params.owner}/${params.repo}/${params.issueNum}`;
-    if (!streamlinedComments[commentKey]) {
-      streamlinedComments[commentKey] = [];
+    // Only fetch code snippets for comments (no similar issues)
+    let codeSnippets: CodeSnippet[] = [];
+    try {
+      codeSnippets = await fetchCodeLinkedFromIssue(commentBody, params.context, comment.issueUrl);
+    } catch (error) {
+      params.context.logger.error(`Failed to fetch code snippets: ${error instanceof Error ? error.message : UNKNOWN_ERROR}`);
     }
 
-    codeSnippets.forEach((snippet) => {
-      if (snippet.body) {
-        updateTokenCount(snippet.body, currentTokenLimits);
+    // Add code snippets as comments if found
+    if (codeSnippets.length > 0) {
+      const commentKey = `${params.owner}/${params.repo}/${params.issueNum}`;
+      if (!streamlinedComments[commentKey]) {
+        streamlinedComments[commentKey] = [];
       }
 
-      streamlinedComments[commentKey].push(
-        createStreamlinedComment({
-          id: `code-${snippet.id}`,
-          body: `Code from ${snippet.id}:\n\`\`\`\n${snippet.body || ""}\n\`\`\``,
-          user: params.context.payload.sender,
-          org: snippet.org,
-          repo: snippet.repo,
-          issueUrl: snippet.issueUrl,
-        })
-      );
-    });
-  }
+      codeSnippets.forEach((snippet) => {
+        if (snippet.body) {
+          updateTokenCount(snippet.body, currentTokenLimits);
+        }
 
-  if (otherReferences) {
-    for (const ref of otherReferences) {
-      const key = `${ref.owner}/${ref.repo}/${ref.issueNumber}`;
-      if (seen.has(key)) {
-        continue;
-      }
+        streamlinedComments[commentKey].push(
+          createStreamlinedComment({
+            id: `code-${snippet.id}`,
+            body: `Code from ${snippet.id}:\n\`\`\`\n${snippet.body || ""}\n\`\`\``,
+            user: params.context.payload.sender,
+            org: snippet.org,
+            repo: snippet.repo,
+            issueUrl: snippet.issueUrl,
+          })
+        );
+      });
+    }
 
-      seen.add(key);
-      if (!streamlinedComments[key]) {
-        await handleIssue({ ...params, owner: ref.owner, repo: ref.repo, issueNum: ref.issueNumber }, streamlinedComments, seen, parentKey, currentTokenLimits);
+    if (otherReferences) {
+      for (const ref of otherReferences) {
+        const key = `${ref.owner}/${ref.repo}/${ref.issueNumber}`;
+        if (seen.has(key)) {
+          continue;
+        }
+
+        seen.add(key);
+        if (!streamlinedComments[key]) {
+          await handleIssue(
+            { ...params, owner: ref.owner, repo: ref.repo, issueNum: ref.issueNumber },
+            streamlinedComments,
+            seen,
+            parentKey,
+            currentTokenLimits
+          );
+        }
       }
     }
+  } catch (error) {
+    params.context.logger.error(`Error handling comment: ${error instanceof Error ? error.message : UNKNOWN_ERROR}`);
+    throw error;
   }
 }
 
@@ -254,7 +320,7 @@ export async function handleSpecAndBodyKeys(
   streamlinedComments: Record<string, StreamlinedComment[]>,
   seen: Set<string>,
   tokenLimits?: TokenLimits
-) {
+): Promise<void> {
   const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params);
 
   const commentProcessingPromises = keys.map(async (key) => {
@@ -275,18 +341,4 @@ export async function handleSpecAndBodyKeys(
   });
 
   await throttlePromises(commentProcessingPromises, 10);
-}
-
-export async function throttlePromises(promises: Promise<void>[], limit: number) {
-  const executing: Promise<void>[] = [];
-  for (const promise of promises) {
-    const p = promise.then(() => {
-      void executing.splice(executing.indexOf(p), 1);
-    });
-    executing.push(p);
-    if (executing.length >= limit) {
-      await Promise.race(executing);
-    }
-  }
-  await Promise.all(executing);
 }

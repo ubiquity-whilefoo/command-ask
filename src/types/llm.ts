@@ -33,7 +33,7 @@ export type GroundTruthsSystemMessageTemplate = {
 };
 
 export type StreamlinedComment = {
-  id: number;
+  id: string | number;
   user?: string;
   body?: string;
   org: string;

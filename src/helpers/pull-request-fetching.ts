@@ -185,7 +185,7 @@ export async function fetchPullRequestComments(params: FetchParams) {
 export async function fetchPullRequestDetails(context: Context, org: string, repo: string, issue: number) {
   try {
     // Fetch diff
-    const diffResponse = await context.octokit.pulls.get({
+    const diffResponse = await context.octokit.rest.pulls.get({
       owner: org,
       repo,
       pull_number: issue,
@@ -194,7 +194,7 @@ export async function fetchPullRequestDetails(context: Context, org: string, rep
     const diff = diffResponse.data as unknown as string;
 
     // Fetch files
-    const filesResponse = await context.octokit.pulls.listFiles({
+    const filesResponse = await context.octokit.rest.pulls.listFiles({
       owner: org,
       repo,
       pull_number: issue,
@@ -206,7 +206,7 @@ export async function fetchPullRequestDetails(context: Context, org: string, rep
 
         if (!diffContent && file.status !== "removed") {
           try {
-            const fileResponse = await context.octokit.repos.getContent({
+            const fileResponse = await context.octokit.rest.repos.getContent({
               owner: org,
               repo,
               path: file.filename,

@@ -1,6 +1,8 @@
 import { Context } from "../types";
 import { FetchParams, SimplifiedComment } from "../types/github-types";
+import { TokenLimits } from "../types/llm";
 import { logger } from "./errors";
+import { updateTokenCount } from "./format-chat-history";
 
 interface PullRequestGraphQlResponse {
   repository: {
@@ -182,13 +184,13 @@ export async function fetchPullRequestComments(params: FetchParams) {
   }
 }
 
-export async function fetchPullRequestDetails(context: Context, org: string, repo: string, issue: number) {
+export async function fetchPullRequestDetails(context: Context, org: string, repo: string, pullRequestNumber: number, tokenLimits: TokenLimits) {
   try {
     // Fetch diff
     const diffResponse = await context.octokit.rest.pulls.get({
       owner: org,
       repo,
-      pull_number: issue,
+      pull_number: pullRequestNumber,
       mediaType: { format: "diff" },
     });
     const diff = diffResponse.data as unknown as string;
@@ -197,14 +199,28 @@ export async function fetchPullRequestDetails(context: Context, org: string, rep
     const filesResponse = await context.octokit.rest.pulls.listFiles({
       owner: org,
       repo,
-      pull_number: issue,
+      pull_number: pullRequestNumber,
     });
 
     const files = await Promise.all(
       filesResponse.data.map(async (file) => {
         let diffContent = file.patch || "";
 
-        if (!diffContent && file.status !== "removed") {
+        // Tokenize the diff content
+
+        //Check the diff length
+        updateTokenCount(diffContent, tokenLimits);
+
+        if (tokenLimits.tokensRemaining < 0) {
+          logger.error("Token limit reached", { owner: org, repo, issue: pullRequestNumber });
+          return {
+            filename: file.filename,
+            diffContent: "",
+            status: file.status as "added" | "modified" | "deleted",
+          };
+        }
+
+        if (!diffContent && file.status !== "removed" && file.sha) {
           try {
             const fileResponse = await context.octokit.rest.repos.getContent({
               owner: org,
@@ -221,7 +237,6 @@ export async function fetchPullRequestDetails(context: Context, org: string, rep
             logger.error(`Error fetching file content`, { file: file.filename, err: String(e) });
           }
         }
-
         return {
           filename: file.filename,
           diffContent,
@@ -235,7 +250,7 @@ export async function fetchPullRequestDetails(context: Context, org: string, rep
       files,
     };
   } catch (e) {
-    logger.error(`Error fetching PR details`, { owner: org, repo, issue, err: String(e) });
+    logger.error(`Error fetching PR details`, { owner: org, repo, issue: pullRequestNumber, err: String(e) });
     return { diff: null };
   }
 }

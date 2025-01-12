@@ -10,7 +10,7 @@ import {
   pullReadmeFromRepoForIssue,
   fetchLinkedIssuesFromComment,
 } from "./issue";
-import { recursivelyFetchLinkedIssues, fetchIssue, mergeCommentsAndFetchSpec } from "./issue-fetching";
+import { recursivelyFetchLinkedIssues, mergeCommentsAndFetchSpec, fetchIssueComments } from "./issue-fetching";
 import { encode } from "gpt-tokenizer";
 
 const UNKNOWN_ERROR = "An unknown error occurred during promise throttling";
@@ -207,26 +207,69 @@ export async function handleSpec(
 
         try {
           seen.add(anotherKey);
-          const issue = await fetchIssue(
+          // Fetch full issue content including comments and PR details
+          const {
+            issue: fetchedIssue,
+            comments,
+            linkedIssues: fetchedLinkedIssues,
+          } = await fetchIssueComments(
             {
               ...params,
               owner: ref.owner,
               repo: ref.repo,
               issueNum: ref.issueNumber,
+              currentDepth: (params.currentDepth || 0) + 1,
             },
             currentTokenLimits
           );
 
-          if (!issue?.body) {
+          if (!fetchedIssue?.body) {
             params.context.logger.error(`No body found for issue ${anotherKey}`);
             continue;
           }
 
-          updateTokenCount(issue.body, currentTokenLimits);
-          specAndBodies[anotherKey] = issue.body;
+          updateTokenCount(fetchedIssue.body, currentTokenLimits);
+          specAndBodies[anotherKey] = fetchedIssue.body;
 
-          if (!streamlinedComments[anotherKey]) {
-            await handleIssue({ ...params, owner: ref.owner, repo: ref.repo, issueNum: ref.issueNumber }, streamlinedComments, seen, key, currentTokenLimits);
+          // Convert and store comments in streamlinedComments
+          if (comments && comments.length > 0) {
+            if (!streamlinedComments[anotherKey]) {
+              streamlinedComments[anotherKey] = [];
+            }
+            const convertedComments = comments.map((comment) =>
+              createStreamlinedComment({
+                id: comment.id,
+                body: comment.body || "",
+                user: comment.user,
+                org: comment.org,
+                repo: comment.repo,
+                issueUrl: comment.issueUrl,
+              })
+            );
+            streamlinedComments[anotherKey].push(...convertedComments);
+          }
+
+          // Process any linked issues found in the fetched issue
+          if (fetchedLinkedIssues && fetchedLinkedIssues.length > 0) {
+            for (const linkedIssue of fetchedLinkedIssues) {
+              const linkedKey = `${linkedIssue.owner}/${linkedIssue.repo}/${linkedIssue.issueNumber}`;
+              if (!seen.has(linkedKey)) {
+                seen.add(linkedKey);
+                await handleIssue(
+                  {
+                    ...params,
+                    owner: linkedIssue.owner,
+                    repo: linkedIssue.repo,
+                    issueNum: linkedIssue.issueNumber,
+                    currentDepth: (params.currentDepth || 0) + 2,
+                  },
+                  streamlinedComments,
+                  seen,
+                  anotherKey,
+                  currentTokenLimits
+                );
+              }
+            }
           }
         } catch (error) {
           params.context.logger.error(`Error fetching issue ${anotherKey}: ${error instanceof Error ? error.message : UNKNOWN_ERROR}`);

@@ -1,6 +1,6 @@
 import { Context } from "../types";
 import { StreamlinedComment, TokenLimits } from "../types/llm";
-import { fetchIssue, recursivelyFetchLinkedIssues } from "./issue-fetching";
+import { fetchIssueComments, recursivelyFetchLinkedIssues } from "./issue-fetching";
 import { splitKey } from "./issue";
 import { logger } from "./errors";
 import { Issue, LinkedIssues } from "../types/github-types";
@@ -19,7 +19,7 @@ interface TreeNode {
   readmeSection?: string;
 }
 
-function updateTokenCount(text: string, tokenLimits: TokenLimits): boolean {
+export function updateTokenCount(text: string, tokenLimits: TokenLimits): boolean {
   const tokenCount = encode(text, { disallowedSpecial: new Set() }).length;
   if (tokenLimits.runningTokenCount + tokenCount > tokenLimits.tokensRemaining) {
     return false;
@@ -156,15 +156,24 @@ async function buildTree(
   });
 
   async function createNode(key: string, depth: number = 0): Promise<TreeNode | null> {
+    // Early return checks to prevent unnecessary processing
     if (depth > maxDepth || processingStack.has(key)) {
+      logger.info(`Skipping due to depth/processing: ${key}`);
       return processedNodes.get(key) || null;
     }
 
     if (processedNodes.has(key)) {
+      logger.info(`Returning already processed node: ${key}`);
       return processedNodes.get(key) || null;
     }
 
+    if (linkedIssueKeys.has(key)) {
+      logger.info(`Skipping already linked issue: ${key}`);
+      return null;
+    }
+
     if (failedFetches.has(key)) {
+      logger.info(`Skipping previously failed fetch: ${key}`);
       return null;
     }
 
@@ -172,15 +181,19 @@ async function buildTree(
 
     try {
       const [owner, repo, issueNum] = splitKey(key);
-      const issue = await fetchIssue(
-        {
-          context,
-          owner,
-          repo,
-          issueNum: parseInt(issueNum),
-        },
-        tokenLimits
-      );
+      // const issue = await fetchIssue(
+      //   {
+      //     context,
+      //     owner,
+      //     repo,
+      //     issueNum: parseInt(issueNum),
+      //   },
+      //   tokenLimits
+      // );
+      logger.info(`Fetching issue for ${key}`);
+      const response = await fetchIssueComments({ context, owner, repo, issueNum: parseInt(issueNum) });
+      const issue = response.issue;
+      logger.info(`Fetched issue for ${key}: ${JSON.stringify(issue?.comments)}`);
 
       if (!issue) {
         failedFetches.add(key);
@@ -192,7 +205,11 @@ async function buildTree(
         issue,
         children: [],
         depth,
-        comments: streamlined[key],
+        comments: response.comments.map((comment) => ({
+          ...comment,
+          user: comment.user?.login || undefined,
+          body: comment.body || undefined,
+        })),
         body: specAndBodies[key] || issue.body || undefined,
       };
 
@@ -201,16 +218,26 @@ async function buildTree(
 
       const references = new Set<string>();
 
+      // Helper function to validate and add references
+      const validateAndAddReferences = async (text: string) => {
+        const refs = await extractReferencedIssuesAndPrs(text, owner, repo);
+        refs.forEach((ref) => {
+          if (validateGitHubKey(ref) && !linkedIssueKeys.has(ref) && !processedNodes.has(ref) && !processingStack.has(ref)) {
+            references.add(ref);
+          }
+        });
+      };
+
+      // Process body references
       if (node.body) {
-        const bodyRefs = await extractReferencedIssuesAndPrs(node.body, owner, repo);
-        bodyRefs.forEach((ref) => references.add(ref));
+        await validateAndAddReferences(node.body);
       }
 
+      // Process comment references
       if (node.comments) {
         for (const comment of node.comments) {
           if (comment.body) {
-            const commentRefs = await extractReferencedIssuesAndPrs(comment.body, owner, repo);
-            commentRefs.forEach((ref) => references.add(ref));
+            await validateAndAddReferences(comment.body);
           }
         }
       }
@@ -221,23 +248,24 @@ async function buildTree(
           for (const match of resolveMatches) {
             const number = match.split("#")[1];
             const targetKey = `${owner}/${repo}/${number}`;
-            if (validateGitHubKey(targetKey) && !linkedIssueKeys.has(targetKey)) {
+            if (validateGitHubKey(targetKey) && !linkedIssueKeys.has(targetKey) && !processedNodes.has(targetKey) && !processingStack.has(targetKey)) {
               references.add(targetKey);
             }
           }
         }
       }
 
-      // Process all references regardless of token count
+      // Process valid references
       for (const ref of references) {
-        if (!linkedIssueKeys.has(ref)) {
-          const childNode = await createNode(ref, depth + 1);
-          if (childNode) {
-            childNode.parent = node;
-            node.children.push(childNode);
-          }
+        const childNode = await createNode(ref, depth + 1);
+        logger.info(`Created child node for ${ref}: ${JSON.stringify(childNode?.comments)}`);
+        if (childNode) {
+          childNode.parent = node;
+          node.children.push(childNode);
         }
+        logger.info(`Processed reference for ${ref}`);
       }
+      logger.info(`Processed node for ${key}: ${JSON.stringify(node.comments)}`);
       return node;
     } catch (error) {
       failedFetches.add(key);
@@ -276,6 +304,42 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
     if (bodyContent.length > 0) {
       output.push(...bodyContent);
       output.push("");
+    }
+  }
+
+  // Process PR details if available
+  if (node.issue.prDetails) {
+    const { diff, files } = node.issue.prDetails;
+
+    // Add diff information
+    if (diff) {
+      const diffContent = formatContent("Diff", diff, childPrefix, contentPrefix, tokenLimits);
+      if (diffContent.length > 0) {
+        output.push(...diffContent);
+        output.push("");
+      }
+    }
+
+    // Add files information
+    if (files && files.length > 0) {
+      const filesHeader = `${childPrefix}Changed Files:`;
+      if (updateTokenCount(filesHeader, tokenLimits)) {
+        output.push(filesHeader);
+        for (const file of files) {
+          const fileLine = `${contentPrefix}${file.status}: ${file.filename}`;
+          if (!updateTokenCount(fileLine, tokenLimits)) break;
+          output.push(fileLine);
+
+          if (file.diffContent) {
+            const diffLines = file.diffContent.split("\n").map((line) => `${contentPrefix}  ${line}`);
+            for (const line of diffLines) {
+              if (!updateTokenCount(line, tokenLimits)) break;
+              output.push(line);
+            }
+          }
+        }
+        output.push("");
+      }
     }
   }
 

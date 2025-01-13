@@ -177,22 +177,22 @@ async function buildTree(
     // Early return checks to prevent unnecessary processing
     if (depth > maxDepth || processingStack.has(key)) {
       // Processing stack is used to prevent infinite loops
-      logger.info(`Skip ${key} - max depth/already processing`);
+      logger.debug(`Skip ${key} - max depth/already processing`);
       return processedNodes.get(key) || null;
     }
 
     if (processedNodes.has(key)) {
-      logger.info(`Return cached node: ${key}`);
+      logger.debug(`Return cached node: ${key}`);
       return processedNodes.get(key) || null;
     }
 
     if (linkedIssueKeys.has(key)) {
-      logger.info(`Skip ${key} - already linked`);
+      logger.debug(`Skip ${key} - already linked`);
       return null;
     }
 
     if (failedFetches.has(key)) {
-      logger.info(`Skip ${key} - previous fetch failed`);
+      logger.debug(`Skip ${key} - previous fetch failed`);
       return null;
     }
 
@@ -201,7 +201,7 @@ async function buildTree(
     try {
       const [owner, repo, issueNum] = splitKey(key);
       const response = await fetchIssueComments({ context, owner, repo, issueNum: parseInt(issueNum) }, tokenLimit);
-      logger.info(`Tokens: ${tokenLimit.runningTokenCount}/${tokenLimit.tokensRemaining}`);
+      logger.debug(`Tokens: ${tokenLimit.runningTokenCount}/${tokenLimit.tokensRemaining}`);
       const issue = response.issue;
 
       if (!issue) {
@@ -254,8 +254,8 @@ async function buildTree(
       // Process valid references
       for (const ref of references) {
         //Uses references found so far to create child nodes
-        const childNode = await createNode(ref, depth + 1); // Recursively create child nodes untill max depth is reached
-        logger.info(`Created child node for ${ref}`);
+        const childNode = await createNode(ref, depth + 1); // Recursively create child nodes until max depth is reached
+        logger.debug(`Created child node for ${ref}`);
         if (childNode) {
           childNode.parent = node;
           node.children.push(childNode);
@@ -384,7 +384,7 @@ export async function formatChatHistory(context: Context, maxDepth: number = 2):
   treeOutput.push(headerLine, "");
 
   await processTreeNode(tree, "", treeOutput, tokenLimits);
-  logger.info(`Final tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
+  logger.debug(`Final tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
 
   return treeOutput;
 }

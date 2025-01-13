@@ -17,7 +17,7 @@ export async function askQuestion(context: Context, question: string) {
   // build a nicely structure system message containing a streamlined chat history
   // includes the current issue, any linked issues, and any linked PRs
   const formattedChat = await formatChatHistory(context, maxDepth);
-  logger.info("Formatted chat history " + formattedChat.join("\n"));
+  logger.debug("Formatted chat history " + formattedChat.join("\n"));
   return await askLlm(context, question, []);
 }
 
@@ -46,7 +46,7 @@ export async function askLlm(context: Context, question: string, formattedChat: 
       ...(similarIssues?.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext) || []),
     ];
 
-    context.logger.info("Similar text: " + similarText.join("\n"));
+    context.logger.debug("Similar text: " + similarText.join("\n"));
 
     // filter out any empty strings
     formattedChat = formattedChat.filter((text) => text);
@@ -56,7 +56,7 @@ export async function askLlm(context: Context, question: string, formattedChat: 
     // gather structural data about the payload repository
     const [languages, { dependencies, devDependencies }] = await Promise.all([fetchRepoLanguageStats(context), fetchRepoDependencies(context)]);
 
-    context.logger.info("Languages: " + languages.join(", "));
+    context.logger.debug("Languages: " + languages.join(", "));
     let groundTruths: string[] = [];
 
     if (!languages.length) {

@@ -11,7 +11,7 @@ import { envSchema } from "../src/types/env";
 import { CompletionsType } from "../src/adapters/openai/helpers/completions";
 import { logger } from "../src/helpers/errors";
 import { Octokit } from "@octokit/rest";
-import { createKey } from "../src/handlers/comments";
+import { createKey } from "../src/helpers/issue-fetching";
 
 const TEST_QUESTION = "what is pi?";
 const LOG_CALLER = "_Logs.<anonymous>";

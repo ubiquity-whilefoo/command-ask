@@ -69,7 +69,7 @@ export class Completions extends SuperOpenAi {
     maxTokens: number
   ): Promise<CompletionsType> {
     const numTokens = await this.findTokenLength(query, additionalContext, localContext, groundTruths);
-    logger.info(`Number of tokens: ${numTokens}`);
+    logger.debug(`Number of tokens: ${numTokens}`);
 
     const sysMsg = [
       "You Must obey the following ground truths: ",
@@ -84,7 +84,6 @@ export class Completions extends SuperOpenAi {
     ].join("\n");
 
     logger.info(`System message: ${sysMsg}`);
-    logger.info(`Query: ${query}`);
 
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({
       model: model,

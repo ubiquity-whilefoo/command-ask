@@ -20,7 +20,7 @@ export async function processPullRequestDiff(diff: string, tokenLimits: TokenLim
   // Using the quick estimate, include as many files as possible without exceeding token limits
   for (const file of estimatedFileDiffStats) {
     if (tokenLimits.runningTokenCount + file.estimatedTokenCount > tokenLimits.tokensRemaining) {
-      logger.info(`Skipping ${file.filename} content to stay within token limits.`);
+      logger.debug(`Skipping ${file.filename} content to stay within token limits.`);
       continue;
     }
     includedFileDiffs.push(file);
@@ -51,7 +51,7 @@ export async function processPullRequestDiff(diff: string, tokenLimits: TokenLim
   for (const file of accurateFileDiffStats) {
     tokenLimits.runningTokenCount += file.tokenCount;
     tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens - tokenLimits.runningTokenCount;
-    logger.info(
+    logger.debug(
       `Added ${file.tokenCount} tokens for ${file.filename}. Running total: ${tokenLimits.runningTokenCount}. Remaining: ${tokenLimits.tokensRemaining}`
     );
   }
@@ -62,7 +62,7 @@ export async function processPullRequestDiff(diff: string, tokenLimits: TokenLim
     if (removedFile) {
       tokenLimits.runningTokenCount -= removedFile.tokenCount;
       tokenLimits.tokensRemaining = tokenLimits.modelMaxTokenLimit - tokenLimits.maxCompletionTokens - tokenLimits.runningTokenCount;
-      logger.info(
+      logger.debug(
         `Excluded ${removedFile.filename} content after accurate token count exceeded limits. Removed ${removedFile.tokenCount} tokens. New total: ${tokenLimits.runningTokenCount}`
       );
     }

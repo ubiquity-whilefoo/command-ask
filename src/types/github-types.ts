@@ -1,14 +1,11 @@
 import { RestEndpointMethodTypes } from "@octokit/rest";
 import { Context } from "./context";
-import { StreamlinedComment } from "./llm";
 
 type BaseIssue = RestEndpointMethodTypes["issues"]["get"]["response"]["data"];
 export interface Issue extends BaseIssue {
   prDetails?: PullRequestDetails;
 }
 
-export type IssueComments = RestEndpointMethodTypes["issues"]["listComments"]["response"]["data"][0];
-export type ReviewComments = RestEndpointMethodTypes["pulls"]["listReviewComments"]["response"]["data"][0];
 export type User = RestEndpointMethodTypes["users"]["getByUsername"]["response"]["data"];
 
 export type FetchParams = {
@@ -71,12 +68,6 @@ export type GqlIssueCommentSearchResult = {
   node: IssueCommentNode;
 };
 
-export interface PullRequestFile {
-  filename: string;
-  diffContent: string;
-  status: "added" | "modified" | "deleted";
-}
-
 export interface PullRequestDetails {
   diff: string | null;
 }
@@ -133,21 +124,4 @@ export interface TreeProcessingQueue {
   depth: number;
   parent?: string;
   priority: number;
-}
-
-export interface ProcessingContext {
-  params: FetchParams;
-  issueTree: Record<string, TreeNode>;
-  seen: Set<string>;
-  processingQueue: TreeProcessingQueue[];
-  linkedIssues: LinkedIssues[];
-  specAndBodies: Record<string, string>;
-  streamlinedComments: Record<string, StreamlinedComment[]>;
-  maxDepth: number;
-}
-
-export interface CommentProcessingResult {
-  processedComments: number;
-  linkedIssues: LinkedIssues[];
-  hasCodeReferences: boolean;
 }

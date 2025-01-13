@@ -91,7 +91,7 @@ export async function fetchPullRequestComments(params: FetchParams) {
       }
       pageCount++;
 
-      logger.info(`Fetching PR comments page ${pageCount}`, { owner, repo, issueNum });
+      logger.debug(`Fetching PR comments page ${pageCount}`, { owner, repo, issueNum });
       const prData: PullRequestGraphQlResponse = await octokit.graphql<PullRequestGraphQlResponse>(
         `
         query($owner: String!, $repo: String!, $number: Int!, $commentsAfter: String, $reviewsAfter: String) {

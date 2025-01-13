@@ -1,10 +1,10 @@
 import { Context } from "../types";
 import { StreamlinedComment, TokenLimits } from "../types/llm";
-import { fetchIssueComments, recursivelyFetchLinkedIssues } from "./issue-fetching";
+import { fetchIssueComments } from "./issue-fetching";
 import { splitKey } from "./issue";
 import { logger } from "./errors";
-import { Issue, LinkedIssues } from "../types/github-types";
-import { encode } from "gpt-tokenizer";
+import { Issue } from "../types/github-types";
+import { updateTokenCount, createDefaultTokenLimits } from "./token-utils";
 
 interface TreeNode {
   key: string;
@@ -17,15 +17,6 @@ interface TreeNode {
   similarIssues?: Issue[];
   codeSnippets?: { body: string; path: string }[];
   readmeSection?: string;
-}
-
-export function updateTokenCount(text: string, tokenLimits: TokenLimits): boolean {
-  const tokenCount = encode(text, { disallowedSpecial: new Set() }).length;
-  if (tokenLimits.runningTokenCount + tokenCount > tokenLimits.tokensRemaining) {
-    return false;
-  }
-  tokenLimits.runningTokenCount += tokenCount;
-  return true;
 }
 
 function validateGitHubKey(key: string): boolean {
@@ -76,9 +67,18 @@ async function extractReferencedIssuesAndPrs(body: string, owner: string, repo: 
   const links = new Set<string>();
   const processedRefs = new Set<string>();
 
-  function addValidReference(key: string) {
-    key = key.replace(/[[]]/g, "");
+  // Split content into lines and identify code blocks
+  const lines = body.split("\n");
+  let isInsideCodeBlock = false;
+  let isInsideQuote = false;
 
+  function addValidReference(key: string, context: { isInsideCodeBlock: boolean; isInsideQuote: boolean }) {
+    // Skip references from code blocks and quoted text
+    if (context.isInsideCodeBlock || context.isInsideQuote) {
+      return;
+    }
+
+    key = key.replace(/[[]]/g, "");
     if (!validateGitHubKey(key)) {
       return;
     }
@@ -88,40 +88,66 @@ async function extractReferencedIssuesAndPrs(body: string, owner: string, repo: 
     }
   }
 
-  const numberRefs = body.match(/(?:^|\s)#(\d+)(?:\s|$)/g) || [];
-  for (const ref of numberRefs) {
-    const number = ref.trim().substring(1);
-    if (/^\d+$/.test(number)) {
-      const key = `${owner}/${repo}/${number}`;
-      addValidReference(key);
-    }
-  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-  const resolveRefs = body.match(/(?:Resolves|Closes|Fixes)\s+#(\d+)/gi) || [];
-  for (const ref of resolveRefs) {
-    const number = ref.split("#")[1];
-    if (/^\d+$/.test(number)) {
-      const key = `${owner}/${repo}/${number}`;
-      addValidReference(key);
+    // Track code blocks
+    if (line.trim().startsWith("```")) {
+      isInsideCodeBlock = !isInsideCodeBlock;
+      continue;
     }
-  }
 
-  const urlMatches = body.match(/https:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s]+?)\/(issues|pull)\/(\d+)(?:#[^/\s]*)?/g) || [];
-  for (const url of urlMatches) {
-    const info = extractGitHubInfo(url);
-    if (info) {
-      const key = `${info.owner}/${info.repo}/${info.number}`;
-      addValidReference(key);
+    // Track quoted text
+    if (line.trim().startsWith(">")) {
+      isInsideQuote = true;
+    } else if (line.trim() === "") {
+      isInsideQuote = false;
     }
-  }
 
-  const crossRepoMatches = body.match(/([^/\s]+)\/([^/\s#]+)#(\d+)/g) || [];
-  for (const ref of crossRepoMatches) {
-    const parts = ref.match(/([^/\s]+)\/([^/\s#]+)#(\d+)/);
-    if (parts) {
-      const key = `${parts[1]}/${parts[2]}/${parts[3]}`;
-      if (validateGitHubKey(key)) {
-        addValidReference(key);
+    const context = { isInsideCodeBlock, isInsideQuote };
+
+    // Only process lines that aren't in code blocks or quotes
+    if (!isInsideCodeBlock && !isInsideQuote) {
+      // Match standalone issue numbers (not in URLs or cross-repo references)
+      const numberRefs = line.match(/(?:^|\s)#(\d+)(?=[\s,.!?]|$)/g) || [];
+      for (const ref of numberRefs) {
+        const number = ref.trim().substring(1);
+        if (/^\d+$/.test(number)) {
+          const key = `${owner}/${repo}/${number}`;
+          addValidReference(key, context);
+        }
+      }
+
+      // Match closing keywords only at start of lines or after common punctuation
+      const resolveRefs = line.match(/(?:^|\.|,|\s)(?:Resolves|Closes|Fixes)\s+#(\d+)(?=[\s,.!?]|$)/gi) || [];
+      for (const ref of resolveRefs) {
+        const number = ref.split("#")[1];
+        if (/^\d+$/.test(number)) {
+          const key = `${owner}/${repo}/${number}`;
+          addValidReference(key, context);
+        }
+      }
+
+      // Match full GitHub URLs with stricter boundaries
+      const urlMatches = line.match(/(?:^|\s)https:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s]+?)\/(issues|pull)\/(\d+)(?:#[^/\s]*)?(?=[\s,.!?]|$)/g) || [];
+      for (const url of urlMatches) {
+        const info = extractGitHubInfo(url.trim());
+        if (info) {
+          const key = `${info.owner}/${info.repo}/${info.number}`;
+          addValidReference(key, context);
+        }
+      }
+
+      // Match cross-repo references with stricter boundaries
+      const crossRepoMatches = line.match(/(?:^|\s)([^/\s]+)\/([^/\s#]+)#(\d+)(?=[\s,.!?]|$)/g) || [];
+      for (const ref of crossRepoMatches) {
+        const parts = ref.trim().match(/([^/\s]+)\/([^/\s#]+)#(\d+)/);
+        if (parts) {
+          const key = `${parts[1]}/${parts[2]}/${parts[3]}`;
+          if (validateGitHubKey(key)) {
+            addValidReference(key, context);
+          }
+        }
       }
     }
   }
@@ -129,13 +155,13 @@ async function extractReferencedIssuesAndPrs(body: string, owner: string, repo: 
   return Array.from(links);
 }
 
+// Builds a tree by recursively fetching linked issues and PRs up to a certain depth
 async function buildTree(
   context: Context,
-  streamlined: Record<string, StreamlinedComment[]>,
   specAndBodies: Record<string, string>,
-  tokenLimits: TokenLimits,
-  maxDepth: number = 2
-): Promise<{ tree: TreeNode | null; linkedIssues: LinkedIssues[] }> {
+  maxDepth: number = 2,
+  tokenLimit: TokenLimits
+): Promise<{ tree: TreeNode | null }> {
   const processedNodes = new Map<string, TreeNode>();
   const mainIssueKey = `${context.payload.repository.owner.login}/${context.payload.repository.name}/${context.payload.issue.number}`;
   const linkedIssueKeys = new Set<string>();
@@ -144,36 +170,29 @@ async function buildTree(
 
   if (!validateGitHubKey(mainIssueKey)) {
     logger.error(`Invalid main issue key: ${mainIssueKey}`);
-    return { tree: null, linkedIssues: [] };
+    return { tree: null };
   }
-
-  const { linkedIssues } = await recursivelyFetchLinkedIssues({
-    context,
-    owner: context.payload.repository.owner.login,
-    repo: context.payload.repository.name,
-    issueNum: context.payload.issue.number,
-    maxDepth: maxDepth,
-  });
 
   async function createNode(key: string, depth: number = 0): Promise<TreeNode | null> {
     // Early return checks to prevent unnecessary processing
     if (depth > maxDepth || processingStack.has(key)) {
-      logger.info(`Skipping due to depth/processing: ${key}`);
+      // Processing stack is used to prevent infinite loops
+      logger.info(`Skip ${key} - max depth/already processing`);
       return processedNodes.get(key) || null;
     }
 
     if (processedNodes.has(key)) {
-      logger.info(`Returning already processed node: ${key}`);
+      logger.info(`Return cached node: ${key}`);
       return processedNodes.get(key) || null;
     }
 
     if (linkedIssueKeys.has(key)) {
-      logger.info(`Skipping already linked issue: ${key}`);
+      logger.info(`Skip ${key} - already linked`);
       return null;
     }
 
     if (failedFetches.has(key)) {
-      logger.info(`Skipping previously failed fetch: ${key}`);
+      logger.info(`Skip ${key} - previous fetch failed`);
       return null;
     }
 
@@ -181,19 +200,9 @@ async function buildTree(
 
     try {
       const [owner, repo, issueNum] = splitKey(key);
-      // const issue = await fetchIssue(
-      //   {
-      //     context,
-      //     owner,
-      //     repo,
-      //     issueNum: parseInt(issueNum),
-      //   },
-      //   tokenLimits
-      // );
-      logger.info(`Fetching issue for ${key}`);
-      const response = await fetchIssueComments({ context, owner, repo, issueNum: parseInt(issueNum) });
+      const response = await fetchIssueComments({ context, owner, repo, issueNum: parseInt(issueNum) }, tokenLimit);
+      logger.info(`Tokens: ${tokenLimit.runningTokenCount}/${tokenLimit.tokensRemaining}`);
       const issue = response.issue;
-      logger.info(`Fetched issue for ${key}: ${JSON.stringify(issue?.comments)}`);
 
       if (!issue) {
         failedFetches.add(key);
@@ -242,30 +251,16 @@ async function buildTree(
         }
       }
 
-      if (issue.pull_request && node.body) {
-        const resolveMatches = node.body.match(/(?:Resolves|Closes|Fixes)\s+#(\d+)/gi);
-        if (resolveMatches) {
-          for (const match of resolveMatches) {
-            const number = match.split("#")[1];
-            const targetKey = `${owner}/${repo}/${number}`;
-            if (validateGitHubKey(targetKey) && !linkedIssueKeys.has(targetKey) && !processedNodes.has(targetKey) && !processingStack.has(targetKey)) {
-              references.add(targetKey);
-            }
-          }
-        }
-      }
-
       // Process valid references
       for (const ref of references) {
-        const childNode = await createNode(ref, depth + 1);
-        logger.info(`Created child node for ${ref}: ${JSON.stringify(childNode?.comments)}`);
+        //Uses references found so far to create child nodes
+        const childNode = await createNode(ref, depth + 1); // Recursively create child nodes untill max depth is reached
+        logger.info(`Created child node for ${ref}`);
         if (childNode) {
           childNode.parent = node;
           node.children.push(childNode);
         }
-        logger.info(`Processed reference for ${ref}`);
       }
-      logger.info(`Processed node for ${key}: ${JSON.stringify(node.comments)}`);
       return node;
     } catch (error) {
       failedFetches.add(key);
@@ -278,14 +273,14 @@ async function buildTree(
 
   try {
     const tree = await createNode(mainIssueKey);
-    return { tree, linkedIssues };
+    return { tree };
   } catch (error) {
     logger.error("Error building tree", { error: error as Error });
-    return { tree: null, linkedIssues };
+    return { tree: null };
   }
 }
 
-async function processTreeNode(node: TreeNode, prefix: string, output: string[], tokenLimits: TokenLimits, linkedIssues?: LinkedIssues[]): Promise<void> {
+async function processTreeNode(node: TreeNode, prefix: string, output: string[], tokenLimits: TokenLimits): Promise<void> {
   // Create header
   const typeStr = node.issue.pull_request ? "PR" : "Issue";
   const headerLine = `${prefix}${node.parent ? "└── " : ""}${typeStr} #${node.issue.number} (${node.issue.html_url})`;
@@ -309,7 +304,7 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
 
   // Process PR details if available
   if (node.issue.prDetails) {
-    const { diff, files } = node.issue.prDetails;
+    const { diff } = node.issue.prDetails;
 
     // Add diff information
     if (diff) {
@@ -318,37 +313,6 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
         output.push(...diffContent);
         output.push("");
       }
-    }
-
-    // Add files information
-    if (files && files.length > 0) {
-      const filesHeader = `${childPrefix}Changed Files:`;
-      if (updateTokenCount(filesHeader, tokenLimits)) {
-        output.push(filesHeader);
-        for (const file of files) {
-          const fileLine = `${contentPrefix}${file.status}: ${file.filename}`;
-          if (!updateTokenCount(fileLine, tokenLimits)) break;
-          output.push(fileLine);
-
-          if (file.diffContent) {
-            const diffLines = file.diffContent.split("\n").map((line) => `${contentPrefix}  ${line}`);
-            for (const line of diffLines) {
-              if (!updateTokenCount(line, tokenLimits)) break;
-              output.push(line);
-            }
-          }
-        }
-        output.push("");
-      }
-    }
-  }
-
-  // Process README for root node
-  if (!node.parent && linkedIssues?.[0]?.readme) {
-    const readmeContent = formatContent("README", linkedIssues[0].readme, childPrefix, contentPrefix, tokenLimits);
-    if (readmeContent.length > 0) {
-      output.push(...readmeContent);
-      output.push("");
     }
   }
 
@@ -379,7 +343,7 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
     const child = node.children[i];
     const isLast = i === node.children.length - 1;
     const nextPrefix = childPrefix + (isLast ? "    " : "│   ");
-    await processTreeNode(child, nextPrefix, output, tokenLimits, linkedIssues);
+    await processTreeNode(child, nextPrefix, output, tokenLimits);
   }
 }
 
@@ -406,36 +370,21 @@ function formatContent(type: string, content: string, prefix: string, contentPre
   return output;
 }
 
-export async function formatChatHistory(
-  context: Context,
-  streamlined: Record<string, StreamlinedComment[]>,
-  specAndBodies: Record<string, string>,
-  maxDepth: number = 2
-): Promise<string[]> {
-  const modelMaxTokenLimit = context.adapters.openai.completions.getModelMaxTokenLimit(context.config.model);
-  const maxCompletionTokens = context.config.maxTokens || context.adapters.openai.completions.getModelMaxOutputLimit(context.config.model);
+export async function formatChatHistory(context: Context, maxDepth: number = 2): Promise<string[]> {
+  const specAndBodies: Record<string, string> = {};
+  const tokenLimits = createDefaultTokenLimits(context);
 
-  const tokenLimits: TokenLimits = {
-    modelMaxTokenLimit,
-    maxCompletionTokens,
-    runningTokenCount: 0,
-    tokensRemaining: modelMaxTokenLimit - maxCompletionTokens,
-  };
-
-  const { tree, linkedIssues } = await buildTree(context, streamlined, specAndBodies, tokenLimits, maxDepth);
+  const { tree } = await buildTree(context, specAndBodies, maxDepth, tokenLimits);
   if (!tree) {
     return ["No main issue found."];
   }
 
   const treeOutput: string[] = [];
   const headerLine = "Issue Tree Structure:";
+  treeOutput.push(headerLine, "");
 
-  if (updateTokenCount(headerLine, tokenLimits)) {
-    treeOutput.push(headerLine, "");
-  }
-
-  await processTreeNode(tree, "", treeOutput, tokenLimits, linkedIssues);
-  logger.info(`Final token count: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining} tokens used`);
+  await processTreeNode(tree, "", treeOutput, tokenLimits);
+  logger.info(`Final tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
 
   return treeOutput;
 }

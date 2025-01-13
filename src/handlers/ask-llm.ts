@@ -2,7 +2,6 @@ import { Context } from "../types";
 import { CompletionsType } from "../adapters/openai/helpers/completions";
 import { CommentSimilaritySearchResult } from "../adapters/supabase/helpers/comment";
 import { IssueSimilaritySearchResult } from "../adapters/supabase/helpers/issues";
-import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
@@ -15,19 +14,11 @@ export async function askQuestion(context: Context, question: string) {
   if (!question) {
     throw logger.error("No question provided");
   }
-  // using any links in comments or issue/pr bodies to fetch more context
-  const { specAndBodies, streamlinedComments } = await recursivelyFetchLinkedIssues({
-    context,
-    maxDepth,
-    owner: context.payload.repository.owner.login,
-    repo: context.payload.repository.name,
-    issueNum: context.payload.issue.number,
-  });
   // build a nicely structure system message containing a streamlined chat history
   // includes the current issue, any linked issues, and any linked PRs
-  const formattedChat = await formatChatHistory(context, streamlinedComments, specAndBodies, 2);
+  const formattedChat = await formatChatHistory(context, maxDepth);
   logger.info("Formatted chat history " + formattedChat.join("\n"));
-  return await askLlm(context, question, formattedChat);
+  return await askLlm(context, question, []);
 }
 
 export async function askLlm(context: Context, question: string, formattedChat: string[]): Promise<CompletionsType> {

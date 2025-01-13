@@ -79,7 +79,6 @@ export interface PullRequestFile {
 
 export interface PullRequestDetails {
   diff: string | null;
-  files?: PullRequestFile[];
 }
 
 export interface LinkedIssues {

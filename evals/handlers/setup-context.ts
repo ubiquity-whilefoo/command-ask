@@ -6,7 +6,6 @@ import { fetchRepoLanguageStats, fetchRepoDependencies } from "../../src/handler
 import { findGroundTruths } from "../../src/handlers/ground-truths/find-ground-truths";
 import { logger } from "../../src/helpers/errors";
 import { formatChatHistory } from "../../src/helpers/format-chat-history";
-import { recursivelyFetchLinkedIssues } from "../../src/helpers/issue-fetching";
 import { Context } from "../../src/types";
 import { VoyageAIClient } from "voyageai";
 import OpenAI from "openai";
@@ -48,12 +47,7 @@ export async function fetchContext(context: Context, question: string): Promise<
       voyage: { reranker },
     },
   } = context;
-  const { specAndBodies, streamlinedComments } = await recursivelyFetchLinkedIssues({
-    context,
-    owner: context.payload.repository.owner.login,
-    repo: context.payload.repository.name,
-  });
-  let formattedChat = await formatChatHistory(context, streamlinedComments, specAndBodies);
+  let formattedChat = await formatChatHistory(context);
   logger.info(`${formattedChat.join("")}`);
   // using db functions to find similar comments and issues
   const [similarComments, similarIssues] = await Promise.all([

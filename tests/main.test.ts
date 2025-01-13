@@ -81,7 +81,6 @@ describe("Ask plugin tests", () => {
     expect(res?.answer).toBe(MOCK_ANSWER);
   });
 
-
   it("Should throw if OPENAI_API_KEY is not defined", () => {
     const settings = {};
     expect(() => Value.Decode(envSchema, settings)).toThrow(TransformDecodeCheckError);
@@ -113,9 +112,6 @@ describe("Ask plugin tests", () => {
       "Body:",
       `      ${SPEC}`,
       "",
-      "README:",
-      '      {"content":"This is a mock README file"}',
-      "",
       "Comments: 2",
       `├── issuecomment-1: ubiquity: More context here #2 [#2](https://github.com/ubiquity/test-repo/issues/2)`,
       `└── issuecomment-2: ubiquity: ${TEST_QUESTION} [#1](https://github.com/ubiquity/test-repo/issues/1)`,
@@ -130,6 +126,8 @@ describe("Ask plugin tests", () => {
       "              └── Issue #3 (https://github.com/ubiquity/test-repo/issues/3)",
       "                  Body:",
       `                      Just another issue`,
+      "                  Comments: 1",
+      `                  └── issuecomment-4: ubiquity: Just a comment [#1](https://github.com/ubiquity/test-repo/issues/1)`,
       "",
     ].join("\n");
 
@@ -265,7 +263,9 @@ function createContext(body = TEST_QUESTION) {
     owner: "ubiquity",
     repo: "test-repo",
     logger: logger,
-    config: {},
+    config: {
+      maxDepth: 5,
+    },
     env: {
       UBIQUITY_OS_APP_NAME: "UbiquityOS",
       OPENAI_API_KEY: "test",

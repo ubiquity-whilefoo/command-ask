@@ -372,6 +372,14 @@ export async function formatChatHistory(context: Context, maxDepth: number = 2):
     return ["No main issue found."];
   }
 
+  if ("pull_request" in context.payload) {
+    const { diff_hunk, position, original_position, path, body } = context.payload.comment || {};
+    if (diff_hunk) {
+      tree.body += `\nPrimary Context: ${body || ""}\nDiff: ${diff_hunk}\nPath: ${path || ""}\nLines: ${position || ""}-${original_position || ""}`;
+      tree.comments = tree.comments?.filter((comment) => comment.id !== context.payload.comment?.id);
+    }
+  }
+
   const treeOutput: string[] = [];
   const headerLine = "Issue Tree Structure:";
   treeOutput.push(headerLine, "");

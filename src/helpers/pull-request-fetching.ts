@@ -35,6 +35,10 @@ interface PullRequestGraphQlResponse {
                 login: string;
                 type: string;
               };
+              path?: string;
+              line?: number;
+              startLine?: number;
+              diffHunk?: string;
             }>;
           };
         }>;
@@ -125,6 +129,10 @@ export async function fetchPullRequestComments(params: FetchParams) {
                         login
                         type: __typename
                       }
+                      path
+                      line
+                      startLine
+                      diffHunk
                     }
                   }
                 }
@@ -170,6 +178,7 @@ export async function fetchPullRequestComments(params: FetchParams) {
               org: owner || "",
               repo: repo || "",
               issueUrl: `https://github.com/${owner}/${repo}/pull/${issueNum}`,
+              commentType: "issue_comment",
             });
           }
         }
@@ -180,7 +189,7 @@ export async function fetchPullRequestComments(params: FetchParams) {
         for (const review of prData.repository.pullRequest.reviews.nodes) {
           for (const comment of review.comments.nodes) {
             if (comment.author.type !== "Bot") {
-              allComments.push({
+              const commentData: SimplifiedComment = {
                 body: comment.body,
                 user: {
                   login: comment.author.login,
@@ -190,7 +199,17 @@ export async function fetchPullRequestComments(params: FetchParams) {
                 org: owner || "",
                 repo: repo || "",
                 issueUrl: `https://github.com/${owner}/${repo}/pull/${issueNum}`,
-              });
+                commentType: "pull_request_review_comment",
+                referencedCode: comment.path
+                  ? {
+                      content: comment.diffHunk || "",
+                      startLine: comment.startLine || comment.line || 0,
+                      endLine: comment.line || 0,
+                      path: comment.path,
+                    }
+                  : undefined,
+              };
+              allComments.push(commentData);
             }
           }
         }

@@ -118,7 +118,7 @@ export async function main() {
               body: scenario.issue.body,
               html_url: scenario.issue.html_url,
               number: scenario.issue.number,
-            } as unknown as Context["payload"]["issue"],
+            } as unknown as Context<"issue_comment.created">["payload"]["issue"],
             sender: scenario.sender,
             repository: {
               name: scenario.repository.name,

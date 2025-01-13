@@ -128,7 +128,21 @@ async function buildTree(
   tokenLimit: TokenLimits
 ): Promise<{ tree: TreeNode | null }> {
   const processedNodes = new Map<string, TreeNode>();
-  const mainIssueKey = `${context.payload.repository.owner.login}/${context.payload.repository.name}/${context.payload.issue.number}`;
+  // Extract issue/PR number based on payload type
+  let issueNumber;
+  if ("issue" in context.payload) {
+    issueNumber = context.payload.issue.number;
+  } else if ("pull_request" in context.payload) {
+    issueNumber = context.payload.pull_request.number;
+  } else {
+    issueNumber = undefined;
+  }
+  if (!issueNumber) {
+    logger.error("Could not determine issue/PR number from payload", { payload: context.payload });
+    return { tree: null };
+  }
+
+  const mainIssueKey = `${context.payload.repository.owner.login}/${context.payload.repository.name}/${issueNumber}`;
   const linkedIssueKeys = new Set<string>();
   const failedFetches = new Set<string>();
   const processingStack = new Set<string>();
@@ -292,7 +306,21 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
         if (!comment.body?.trim()) continue;
 
         const commentPrefix = i === node.comments.length - 1 ? "└── " : "├── ";
-        const commentLine = `${childPrefix}${commentPrefix}issuecomment-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
+        let commentLine = `${childPrefix}${commentPrefix}${comment.commentType || "issuecomment"}-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
+
+        // Add referenced code for PR review comments if available
+        if (comment.commentType === "pull_request_review_comment" && comment.referencedCode) {
+          const lineNumbers = `Lines ${comment.referencedCode.startLine}-${comment.referencedCode.endLine}:`;
+          const codePath = `Referenced code in ${comment.referencedCode.path}:`;
+          const content = comment.referencedCode.content.split("\n");
+          const indentedContent = content.map((line) => childPrefix + "    " + line).join("\n");
+          const codeLines = [childPrefix + "    " + codePath, childPrefix + "    " + lineNumbers, childPrefix + "    " + indentedContent];
+
+          if (!updateTokenCount(codeLines.join("\n"), tokenLimits)) {
+            break;
+          }
+          commentLine = `${commentLine}\n${codeLines.join("\n")}`;
+        }
 
         if (!updateTokenCount(commentLine, tokenLimits)) {
           break;

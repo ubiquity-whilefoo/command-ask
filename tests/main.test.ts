@@ -102,7 +102,7 @@ describe("Ask plugin tests", () => {
       transformCommentTemplate(4, 3, "Just a comment", "ubiquity", "test-repo", true, "1"),
     ]);
 
-    const issueCommentCreatedCallback = (await import("../src/handlers/comment-created-callback")).issueCommentCreatedCallback;
+    const issueCommentCreatedCallback = (await import("../src/handlers/comment-created-callback")).processCommentCallback;
     await issueCommentCreatedCallback(ctx);
 
     const expectedOutput = [
@@ -246,7 +246,7 @@ function createContext(body = TEST_QUESTION) {
   const user = db.users.findFirst({ where: { id: { equals: 1 } } });
   return {
     payload: {
-      issue: db.issue.findFirst({ where: { id: { equals: 1 } } }) as unknown as Context["payload"]["issue"],
+      issue: db.issue.findFirst({ where: { id: { equals: 1 } } }) as unknown as Context<"issue_comment.created">["payload"]["issue"],
       sender: user,
       repository: db.repo.findFirst({ where: { id: { equals: 1 } } }) as unknown as Context["payload"]["repository"],
       comment: { body, user: user } as unknown as Context["payload"]["comment"],

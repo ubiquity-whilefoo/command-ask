@@ -91,6 +91,13 @@ export type SimplifiedComment = {
   org: string;
   repo: string;
   issueUrl: string;
+  referencedCode?: {
+    content: string;
+    startLine: number;
+    endLine: number;
+    path: string;
+  };
+  commentType?: "issue_comment" | "pull_request_review_comment";
 };
 
 export type FetchedCodes = {

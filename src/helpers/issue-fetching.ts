@@ -60,7 +60,20 @@ export async function fetchIssue(params: FetchParams, tokenLimits?: TokenLimits)
   // Ensure we always have valid owner and repo
   const targetOwner = owner || payload.repository.owner.login;
   const targetRepo = repo || payload.repository.name;
-  const targetIssueNum = issueNum || payload.issue.number;
+  // Handle both issue comments and PR review comments
+  let targetIssueNum = issueNum;
+  if (!targetIssueNum && payload.action === "created") {
+    if ("issue" in payload) {
+      targetIssueNum = payload.issue.number;
+    } else if ("pull_request" in payload) {
+      targetIssueNum = payload.pull_request.number;
+    }
+  }
+
+  if (!targetIssueNum) {
+    logger.error("Could not determine issue/PR number from payload", { payload });
+    return null;
+  }
 
   try {
     const response = await octokit.rest.issues.get({
@@ -95,7 +108,20 @@ export async function fetchIssueComments(params: FetchParams, tokenLimits?: Toke
 
   const targetOwner = owner || payload.repository.owner.login;
   const targetRepo = repo || payload.repository.name;
-  const targetIssueNum = issueNum || payload.issue.number;
+  // Handle both issue comments and PR review comments
+  let targetIssueNum = issueNum;
+  if (!targetIssueNum && payload.action === "created") {
+    if ("issue" in payload) {
+      targetIssueNum = payload.issue.number;
+    } else if ("pull_request" in payload) {
+      targetIssueNum = payload.pull_request.number;
+    }
+  }
+
+  if (!targetIssueNum) {
+    logger.error("Could not determine issue/PR number from payload", { payload });
+    return { issue: null, comments: null, linkedIssues: null };
+  }
   const currentTokenLimits = tokenLimits || createDefaultTokenLimits(params.context);
 
   const issue = await fetchIssue(
@@ -182,6 +208,7 @@ export async function fetchIssueComments(params: FetchParams, tokenLimits?: Toke
           org: targetOwner,
           repo: targetRepo,
           issueUrl: comment.html_url,
+          commentType: "issue_comment",
         }));
 
       // Process any linked issues found in comments

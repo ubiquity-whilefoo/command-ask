@@ -43,6 +43,13 @@ export type StreamlinedComment = {
     html: string;
     text: string;
   };
+  commentType?: "issue_comment" | "pull_request_review_comment";
+  referencedCode?: {
+    content: string;
+    startLine: number;
+    endLine: number;
+    path: string;
+  };
 };
 
 export type TokenLimits = {

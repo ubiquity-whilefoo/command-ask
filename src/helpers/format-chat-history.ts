@@ -67,18 +67,9 @@ async function extractReferencedIssuesAndPrs(body: string, owner: string, repo: 
   const links = new Set<string>();
   const processedRefs = new Set<string>();
 
-  // Split content into lines and identify code blocks
-  const lines = body.split("\n");
-  let isInsideCodeBlock = false;
-  let isInsideQuote = false;
-
-  function addValidReference(key: string, context: { isInsideCodeBlock: boolean; isInsideQuote: boolean }) {
-    // Skip references from code blocks and quoted text
-    if (context.isInsideCodeBlock || context.isInsideQuote) {
-      return;
-    }
-
+  function addValidReference(key: string) {
     key = key.replace(/[[]]/g, "");
+
     if (!validateGitHubKey(key)) {
       return;
     }
@@ -88,66 +79,40 @@ async function extractReferencedIssuesAndPrs(body: string, owner: string, repo: 
     }
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Track code blocks
-    if (line.trim().startsWith("```")) {
-      isInsideCodeBlock = !isInsideCodeBlock;
-      continue;
+  const numberRefs = body.match(/(?:^|\s)#(\d+)(?:\s|$)/g) || [];
+  for (const ref of numberRefs) {
+    const number = ref.trim().substring(1);
+    if (/^\d+$/.test(number)) {
+      const key = `${owner}/${repo}/${number}`;
+      addValidReference(key);
     }
+  }
 
-    // Track quoted text
-    if (line.trim().startsWith(">")) {
-      isInsideQuote = true;
-    } else if (line.trim() === "") {
-      isInsideQuote = false;
+  const resolveRefs = body.match(/(?:Resolves|Closes|Fixes)\s+#(\d+)/gi) || [];
+  for (const ref of resolveRefs) {
+    const number = ref.split("#")[1];
+    if (/^\d+$/.test(number)) {
+      const key = `${owner}/${repo}/${number}`;
+      addValidReference(key);
     }
+  }
 
-    const context = { isInsideCodeBlock, isInsideQuote };
+  const urlMatches = body.match(/https:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s]+?)\/(issues|pull)\/(\d+)(?:#[^/\s]*)?/g) || [];
+  for (const url of urlMatches) {
+    const info = extractGitHubInfo(url);
+    if (info) {
+      const key = `${info.owner}/${info.repo}/${info.number}`;
+      addValidReference(key);
+    }
+  }
 
-    // Only process lines that aren't in code blocks or quotes
-    if (!isInsideCodeBlock && !isInsideQuote) {
-      // Match standalone issue numbers (not in URLs or cross-repo references)
-      const numberRefs = line.match(/(?:^|\s)#(\d+)(?=[\s,.!?]|$)/g) || [];
-      for (const ref of numberRefs) {
-        const number = ref.trim().substring(1);
-        if (/^\d+$/.test(number)) {
-          const key = `${owner}/${repo}/${number}`;
-          addValidReference(key, context);
-        }
-      }
-
-      // Match closing keywords only at start of lines or after common punctuation
-      const resolveRefs = line.match(/(?:^|\.|,|\s)(?:Resolves|Closes|Fixes)\s+#(\d+)(?=[\s,.!?]|$)/gi) || [];
-      for (const ref of resolveRefs) {
-        const number = ref.split("#")[1];
-        if (/^\d+$/.test(number)) {
-          const key = `${owner}/${repo}/${number}`;
-          addValidReference(key, context);
-        }
-      }
-
-      // Match full GitHub URLs with stricter boundaries
-      const urlMatches = line.match(/(?:^|\s)https:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s]+?)\/(issues|pull)\/(\d+)(?:#[^/\s]*)?(?=[\s,.!?]|$)/g) || [];
-      for (const url of urlMatches) {
-        const info = extractGitHubInfo(url.trim());
-        if (info) {
-          const key = `${info.owner}/${info.repo}/${info.number}`;
-          addValidReference(key, context);
-        }
-      }
-
-      // Match cross-repo references with stricter boundaries
-      const crossRepoMatches = line.match(/(?:^|\s)([^/\s]+)\/([^/\s#]+)#(\d+)(?=[\s,.!?]|$)/g) || [];
-      for (const ref of crossRepoMatches) {
-        const parts = ref.trim().match(/([^/\s]+)\/([^/\s#]+)#(\d+)/);
-        if (parts) {
-          const key = `${parts[1]}/${parts[2]}/${parts[3]}`;
-          if (validateGitHubKey(key)) {
-            addValidReference(key, context);
-          }
-        }
+  const crossRepoMatches = body.match(/([^/\s]+)\/([^/\s#]+)#(\d+)/g) || [];
+  for (const ref of crossRepoMatches) {
+    const parts = ref.match(/([^/\s]+)\/([^/\s#]+)#(\d+)/);
+    if (parts) {
+      const key = `${parts[1]}/${parts[2]}/${parts[3]}`;
+      if (validateGitHubKey(key)) {
+        addValidReference(key);
       }
     }
   }

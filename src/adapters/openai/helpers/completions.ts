@@ -70,7 +70,7 @@ export class Completions extends SuperOpenAi {
   ): Promise<CompletionsType> {
     const numTokens = await this.findTokenLength(query, additionalContext, localContext, groundTruths);
     logger.debug(`Number of tokens: ${numTokens}`);
-
+    logger.info(`Local context: ${localContext.join("\n")}`);
     const sysMsg = [
       "You Must obey the following ground truths: ",
       JSON.stringify(groundTruths) + "\n",
@@ -82,7 +82,6 @@ export class Completions extends SuperOpenAi {
       "Secondary Context: ",
       additionalContext.join("\n"),
     ].join("\n");
-
     logger.info(`System message: ${sysMsg}`);
 
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({

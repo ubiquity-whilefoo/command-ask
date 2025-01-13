@@ -48,9 +48,6 @@ export async function askLlm(context: Context, question: string, formattedChat: 
 
     context.logger.debug("Similar text: " + similarText.join("\n"));
 
-    // filter out any empty strings
-    formattedChat = formattedChat.filter((text) => text);
-
     // rerank the similar text using voyageai
     const rerankedText = similarText.length > 0 ? await reranker.reRankResults(similarText, question) : [];
     // gather structural data about the payload repository

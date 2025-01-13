@@ -70,7 +70,6 @@ export class Completions extends SuperOpenAi {
   ): Promise<CompletionsType> {
     const numTokens = await this.findTokenLength(query, additionalContext, localContext, groundTruths);
     logger.debug(`Number of tokens: ${numTokens}`);
-    logger.info(`Local context: ${localContext.join("\n")}`);
     const sysMsg = [
       "You Must obey the following ground truths: ",
       JSON.stringify(groundTruths) + "\n",

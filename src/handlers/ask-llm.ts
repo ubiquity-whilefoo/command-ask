@@ -18,7 +18,7 @@ export async function askQuestion(context: Context, question: string) {
   // includes the current issue, any linked issues, and any linked PRs
   const formattedChat = await formatChatHistory(context, maxDepth);
   logger.debug("Formatted chat history " + formattedChat.join("\n"));
-  return await askLlm(context, question, []);
+  return await askLlm(context, question, formattedChat);
 }
 
 export async function askLlm(context: Context, question: string, formattedChat: string[]): Promise<CompletionsType> {

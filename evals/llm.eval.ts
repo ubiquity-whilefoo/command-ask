@@ -66,7 +66,6 @@ const inputs = {
   config: {
     model: "gpt-4o",
     similarityThreshold: 0.8,
-    maxTokens: 1000,
   },
   settings: {
     openAiBaseUrl: "https://openrouter.ai/api/v1",
@@ -146,8 +145,7 @@ export async function main() {
           chatHistory.rerankedText,
           chatHistory.formattedChat,
           chatHistory.groundTruths,
-          initialContext.env.UBIQUITY_OS_APP_NAME,
-          initialContext.config.maxTokens
+          initialContext.env.UBIQUITY_OS_APP_NAME
         );
 
         return {

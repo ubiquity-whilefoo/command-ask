@@ -4,7 +4,7 @@ import { encode } from "gpt-tokenizer";
 
 export function createDefaultTokenLimits(context: Context): TokenLimits {
   const modelMaxTokenLimit = context.adapters.openai.completions.getModelMaxTokenLimit(context.config.model);
-  const maxCompletionTokens = context.config.maxTokens || context.adapters.openai.completions.getModelMaxOutputLimit(context.config.model);
+  const maxCompletionTokens = context.adapters.openai.completions.getModelMaxOutputLimit(context.config.model);
 
   return {
     modelMaxTokenLimit,

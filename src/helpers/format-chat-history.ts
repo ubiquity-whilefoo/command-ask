@@ -363,11 +363,16 @@ function formatContent(type: string, content: string, prefix: string, contentPre
   return output;
 }
 
-export async function formatChatHistory(context: Context, maxDepth: number = 2): Promise<string[]> {
+export async function formatChatHistory(context: Context, maxDepth: number = 2, availableTokens?: number): Promise<string[]> {
   const specAndBodies: Record<string, string> = {};
-  const tokenLimits = createDefaultTokenLimits(context);
+  const fetchTokenLimits = createDefaultTokenLimits(context);
 
-  const { tree } = await buildTree(context, specAndBodies, maxDepth, tokenLimits);
+  // If availableTokens is provided, override the default tokensRemaining
+  if (availableTokens !== undefined) {
+    fetchTokenLimits.tokensRemaining = availableTokens;
+  }
+
+  const { tree } = await buildTree(context, specAndBodies, maxDepth, fetchTokenLimits);
   if (!tree) {
     return ["No main issue found."];
   }
@@ -384,8 +389,10 @@ export async function formatChatHistory(context: Context, maxDepth: number = 2):
   const headerLine = "Issue Tree Structure:";
   treeOutput.push(headerLine, "");
 
-  await processTreeNode(tree, "", treeOutput, tokenLimits);
-  logger.debug(`Final tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
+  // Create new token limits for formatting phase to avoid double counting
+  const formatTokenLimits = createDefaultTokenLimits(context);
+  await processTreeNode(tree, "", treeOutput, formatTokenLimits);
+  logger.debug(`Final tokens: ${formatTokenLimits.runningTokenCount}/${formatTokenLimits.tokensRemaining}`);
 
   return treeOutput;
 }

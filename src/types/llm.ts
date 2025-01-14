@@ -1,3 +1,4 @@
+import { Context } from "@ubiquity-os/plugin-sdk";
 import { GROUND_TRUTHS_SYSTEM_MESSAGES } from "../handlers/ground-truths/prompts";
 
 export type ModelApplications = "code-review" | "chat-bot";
@@ -54,6 +55,7 @@ export type StreamlinedComment = {
 
 export type TokenLimits = {
   modelMaxTokenLimit: number;
+  context: Context;
   maxCompletionTokens: number;
   runningTokenCount: number;
   tokensRemaining: number;

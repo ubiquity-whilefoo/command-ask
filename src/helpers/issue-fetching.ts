@@ -3,7 +3,7 @@ import { TokenLimits } from "../types/llm";
 import { logger } from "./errors";
 import { idIssueFromComment } from "./issue";
 import { fetchPullRequestComments, fetchPullRequestDetails } from "./pull-request-fetching";
-import { createDefaultTokenLimits } from "./token-utils";
+import { createDefaultTokenLimits, updateTokenCount } from "./token-utils";
 
 /**
  * Create a unique key for an issue based on its URL and optional issue number
@@ -84,6 +84,21 @@ export async function fetchIssue(params: FetchParams, tokenLimits?: TokenLimits)
 
     const issue: Issue = response.data;
 
+    if (tokenLimits) {
+      updateTokenCount(
+        JSON.stringify({
+          issue: issue.body,
+          comments: issue.comments,
+        }),
+        tokenLimits
+      );
+      if (issue.pull_request) {
+        logger.debug(`Fetched PR #${targetIssueNum} and updated token count`);
+      } else {
+        logger.debug(`Fetched issue #${targetIssueNum} and updated token count`);
+      }
+    }
+
     // If this is a PR, fetch additional details
     if (issue.pull_request) {
       tokenLimits = tokenLimits || createDefaultTokenLimits(params.context);
@@ -151,17 +166,34 @@ export async function fetchIssueComments(params: FetchParams, tokenLimits?: Toke
       issueNum: targetIssueNum,
     });
 
+    // Update token count
+    updateTokenCount(
+      JSON.stringify(
+        prData.comments.map((comment: SimplifiedComment) => {
+          return {
+            id: comment.id,
+            body: comment.body,
+            user: comment.user,
+            ...(comment.referencedCode ? { referencedCode: comment.referencedCode } : {}),
+          };
+        })
+      ),
+      currentTokenLimits
+    );
     comments = prData.comments;
 
     // Process linked issues from PR with their full content
     for (const linked of prData.linkedIssues) {
       // First fetch the issue/PR to determine its type
-      const linkedIssue = await fetchIssue({
-        ...params,
-        owner: linked.owner,
-        repo: linked.repo,
-        issueNum: linked.number,
-      });
+      const linkedIssue = await fetchIssue(
+        {
+          ...params,
+          owner: linked.owner,
+          repo: linked.repo,
+          issueNum: linked.number,
+        },
+        currentTokenLimits
+      );
 
       if (linkedIssue) {
         const linkedComments = await fetchIssueComments(
@@ -210,6 +242,20 @@ export async function fetchIssueComments(params: FetchParams, tokenLimits?: Toke
           issueUrl: comment.html_url,
           commentType: "issue_comment",
         }));
+
+      // Update token count
+      updateTokenCount(
+        JSON.stringify(
+          comments.map((comment: SimplifiedComment) => {
+            return {
+              body: comment.body,
+              id: comment.id,
+              user: comment.user,
+            };
+          })
+        ),
+        currentTokenLimits
+      );
 
       // Process any linked issues found in comments
       const linkedIssuesFromComments = comments

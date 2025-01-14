@@ -180,7 +180,6 @@ async function buildTree(
     try {
       const [owner, repo, issueNum] = splitKey(key);
       const response = await fetchIssueComments({ context, owner, repo, issueNum: parseInt(issueNum) }, tokenLimit);
-      logger.debug(`Tokens: ${tokenLimit.runningTokenCount}/${tokenLimit.tokensRemaining}`);
       const issue = response.issue;
 
       if (!issue) {
@@ -252,6 +251,7 @@ async function buildTree(
 
   try {
     const tree = await createNode(mainIssueKey);
+    console.log(`Map size: ${JSON.stringify(Array.from(processedNodes.keys()))}`);
     return { tree };
   } catch (error) {
     logger.error("Error building tree", { error: error as Error });
@@ -377,6 +377,8 @@ export async function formatChatHistory(context: Context, maxDepth: number = 2, 
     return ["No main issue found."];
   }
 
+  logger.debug(`Tokens: ${fetchTokenLimits.runningTokenCount}/${fetchTokenLimits.tokensRemaining}`);
+
   if ("pull_request" in context.payload) {
     const { diff_hunk, position, original_position, path, body } = context.payload.comment || {};
     if (diff_hunk) {
@@ -393,6 +395,5 @@ export async function formatChatHistory(context: Context, maxDepth: number = 2, 
   const formatTokenLimits = createDefaultTokenLimits(context);
   await processTreeNode(tree, "", treeOutput, formatTokenLimits);
   logger.debug(`Final tokens: ${formatTokenLimits.runningTokenCount}/${formatTokenLimits.tokensRemaining}`);
-
   return treeOutput;
 }

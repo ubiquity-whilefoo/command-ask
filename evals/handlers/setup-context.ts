@@ -1,7 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { createAdapters } from "../../src/adapters";
-import { CommentSimilaritySearchResult } from "../../src/adapters/supabase/helpers/comment";
-import { IssueSimilaritySearchResult } from "../../src/adapters/supabase/helpers/issues";
 import { fetchRepoLanguageStats, fetchRepoDependencies } from "../../src/handlers/ground-truths/chat-bot";
 import { findGroundTruths } from "../../src/handlers/ground-truths/find-ground-truths";
 import { logger } from "../../src/helpers/errors";
@@ -9,11 +7,11 @@ import { formatChatHistory } from "../../src/helpers/format-chat-history";
 import { Context } from "../../src/types";
 import { VoyageAIClient } from "voyageai";
 import OpenAI from "openai";
+import { fetchSimilarContent } from "../../src/helpers/issue-fetching";
 
 const SEPERATOR = "######################################################\n";
 
 export interface FetchContext {
-  rerankedText: string[];
   formattedChat: string[];
   groundTruths: string[];
 }
@@ -41,45 +39,69 @@ export const initAdapters = (context: Context, clients: EvalClients): Context =>
 
 export async function fetchContext(context: Context, question: string): Promise<FetchContext> {
   const {
-    config: { similarityThreshold },
+    config: { similarityThreshold, model, maxDepth },
     adapters: {
       supabase: { comment, issue },
       voyage: { reranker },
+      openai: { completions },
     },
   } = context;
-  let formattedChat = await formatChatHistory(context);
-  logger.info(`${formattedChat.join("")}`);
-  // using db functions to find similar comments and issues
-  const [similarComments, similarIssues] = await Promise.all([
+  // Calculate total available tokens
+  const modelMaxTokens = completions.getModelMaxTokenLimit(model);
+  const maxCompletionTokens = completions.getModelMaxOutputLimit(model);
+  let availableTokens = modelMaxTokens - maxCompletionTokens;
+
+  // Calculate base prompt tokens (system message + query template)
+  const basePromptTokens = await completions.getPromptTokens();
+  availableTokens -= basePromptTokens;
+  logger.debug(`Base prompt tokens: ${basePromptTokens}`);
+
+  // Find similar comments and issues from Supabase
+  const [similarCommentsSearch, similarIssuesSearch] = await Promise.all([
     comment.findSimilarComments(question, 1 - similarityThreshold, ""),
     issue.findSimilarIssues(question, 1 - similarityThreshold, ""),
   ]);
-  // combine the similar comments and issues into a single array
+
+  // Fetch full content for similar items using GitHub API
+  const { similarIssues, similarComments } = await fetchSimilarContent(context, similarIssuesSearch || [], similarCommentsSearch || []);
+
+  logger.debug(`Fetched similar comments: ${JSON.stringify(similarComments)}`);
+  logger.debug(`Fetched similar issues: ${JSON.stringify(similarIssues)}`);
+
+  // Rerank similar content
+  const { similarIssues: rerankedIssues, similarComments: rerankedComments } = await reranker.reRankSimilarContent(question, similarIssues, similarComments);
+
+  // Calculate token usage from reranked content
   const similarText = [
-    ...(similarComments?.map((comment: CommentSimilaritySearchResult) => comment.comment_plaintext) || []),
-    ...(similarIssues?.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext) || []),
+    ...rerankedComments.map((comment) => comment.body).filter((body): body is string => !!body),
+    ...rerankedIssues.map((issue) => issue.body).filter((body): body is string => !!body),
   ];
-  // filter out any empty strings
-  formattedChat = formattedChat.filter((text) => text);
-  // rerank the similar text using voyageai
-  const rerankedText = similarText.length > 0 ? await reranker.reRankResults(similarText, question) : [];
-  // gather structural data about the payload repository
+  const similarTextTokens = await completions.findTokenLength(similarText.join("\n"));
+  availableTokens -= similarTextTokens;
+  logger.debug(`Similar text tokens: ${similarTextTokens}`);
+
+  // Gather repository data and calculate ground truths
   const [languages, { dependencies, devDependencies }] = await Promise.all([fetchRepoLanguageStats(context), fetchRepoDependencies(context)]);
+
+  // Initialize ground truths
   let groundTruths: string[] = [];
-  if (!languages.length) {
-    groundTruths.push("No languages found in the repository");
-  }
-  if (!Reflect.ownKeys(dependencies).length) {
-    groundTruths.push("No dependencies found in the repository");
-  }
-  if (!Reflect.ownKeys(devDependencies).length) {
-    groundTruths.push("No devDependencies found in the repository");
-  }
-  if (groundTruths.length > 3) {
+  if (!languages.length) groundTruths.push("No languages found in the repository");
+  if (!Reflect.ownKeys(dependencies).length) groundTruths.push("No dependencies found in the repository");
+  if (!Reflect.ownKeys(devDependencies).length) groundTruths.push("No devDependencies found in the repository");
+
+  // If not all empty, get full ground truths
+  if (groundTruths.length !== 3) {
     groundTruths = await findGroundTruths(context, "chat-bot", { languages, dependencies, devDependencies });
   }
+
+  // Calculate ground truths tokens
+  const groundTruthsTokens = await completions.findTokenLength(groundTruths.join("\n"));
+  availableTokens -= groundTruthsTokens;
+  logger.debug(`Ground truths tokens: ${groundTruthsTokens}`);
+
+  // Get formatted chat history with remaining tokens and reranked content
+  const formattedChat = await formatChatHistory(context, maxDepth, availableTokens, rerankedIssues, rerankedComments);
   return {
-    rerankedText,
     formattedChat,
     groundTruths,
   };
@@ -90,12 +112,6 @@ export function formattedHistory(fetchContext: FetchContext): string {
   let formattedChat = "#################### Chat History ####################\n";
   fetchContext.formattedChat.forEach((chat) => {
     formattedChat += chat;
-  });
-  formattedChat += SEPERATOR;
-  //Iterate through the reranked text and add it to the final formatted chat
-  formattedChat += "#################### Reranked Text ####################\n";
-  fetchContext.rerankedText.forEach((reranked) => {
-    formattedChat += reranked;
   });
   formattedChat += SEPERATOR;
   //Iterate through the ground truths and add it to the final formatted chat

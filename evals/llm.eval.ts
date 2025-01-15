@@ -12,6 +12,9 @@ import { writeFileSync } from "fs";
 import { fetchContext, formattedHistory, initAdapters } from "./handlers/setup-context";
 import { LOG_LEVEL, Logs } from "@ubiquity-os/ubiquity-os-logger";
 
+import { config } from "dotenv";
+config();
+
 // Required environment variables with type assertion
 const requiredEnvVars = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY as string,
@@ -138,11 +141,9 @@ export async function main() {
 
         initialContext = initAdapters(initialContext, clients);
         const chatHistory = await fetchContext(initialContext, scenario.issue.question);
-        const formattedContextHistory = formattedHistory(chatHistory);
         const result = await initialContext.adapters.openai.completions.createCompletion(
           scenario.issue.question,
           initialContext.config.model || "gpt-4o",
-          chatHistory.rerankedText,
           chatHistory.formattedChat,
           chatHistory.groundTruths,
           initialContext.env.UBIQUITY_OS_APP_NAME
@@ -150,7 +151,7 @@ export async function main() {
 
         return {
           output: result.answer,
-          context: formattedContextHistory,
+          context: formattedHistory(chatHistory),
           expected: scenario.expectedResponse,
         };
       },

@@ -110,6 +110,19 @@ export type FetchedCodes = {
   issueNumber: number;
 };
 
+export interface SimilarIssue extends LinkedIssues {
+  similarity: number;
+  text_similarity: number;
+  issue_id: string;
+}
+
+export interface SimilarComment extends SimplifiedComment {
+  similarity: number;
+  text_similarity: number;
+  comment_id: string;
+  comment_issue_id: string;
+}
+
 export interface TreeNode {
   issue: LinkedIssues;
   children: string[];
@@ -123,6 +136,8 @@ export interface TreeNode {
     commentCount: number;
     linkedIssuesCount: number;
     hasCodeReferences: boolean;
+    similarIssues?: SimilarIssue[];
+    similarComments?: SimilarComment[];
   };
 }
 
@@ -131,4 +146,61 @@ export interface TreeProcessingQueue {
   depth: number;
   parent?: string;
   priority: number;
+}
+
+export interface IssueSearchResult {
+  node: {
+    id: string;
+    number: number;
+    body: string;
+    repository: Repository;
+    title: string;
+    url: string;
+    author: {
+      login: string;
+    };
+    comments: {
+      nodes: Array<{
+        id: string;
+        body: string;
+        author: {
+          login: string;
+        };
+      }>;
+    };
+  };
+}
+
+export interface CommentIssueSearchResult {
+  node: {
+    id: string;
+    body: string;
+    author: {
+      login: string;
+    };
+    issue?: {
+      id: string;
+      number: number;
+      title: string;
+      url: string;
+      repository: {
+        name: string;
+        owner: {
+          login: string;
+        };
+      };
+    };
+    pullRequest?: {
+      id: string;
+      number: number;
+      title: string;
+      url: string;
+      repository: {
+        name: string;
+        owner: {
+          login: string;
+        };
+      };
+    };
+  };
 }

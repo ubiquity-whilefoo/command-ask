@@ -1,4 +1,14 @@
-import { FetchParams, Issue, LinkedIssues, SimplifiedComment } from "../types/github-types";
+import { Context } from "@ubiquity-os/plugin-sdk";
+import {
+  FetchParams,
+  Issue,
+  LinkedIssues,
+  SimplifiedComment,
+  SimilarIssue,
+  SimilarComment,
+  IssueSearchResult,
+  CommentIssueSearchResult,
+} from "../types/github-types";
 import { TokenLimits } from "../types/llm";
 import { logger } from "./errors";
 import { idIssueFromComment } from "./issue";
@@ -115,6 +125,186 @@ export async function fetchIssue(params: FetchParams, tokenLimits?: TokenLimits)
     });
     return null;
   }
+}
+
+export const GET_ISSUE_BY_ID = /* GraphQL */ `
+  query GetIssueById($id: ID!) {
+    node(id: $id) {
+      ... on Issue {
+        id
+        number
+        title
+        body
+        url
+        repository {
+          name
+          owner {
+            login
+          }
+        }
+        author {
+          login
+        }
+        comments(first: 100) {
+          nodes {
+            id
+            body
+            author {
+              login
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const GET_COMMENT_BY_ID = /* GraphQL */ `
+  query GetCommentById($id: ID!) {
+    node(id: $id) {
+      ... on IssueComment {
+        id
+        body
+        author {
+          login
+        }
+        issue {
+          id
+          number
+          title
+          url
+          repository {
+            name
+            owner {
+              login
+            }
+          }
+        }
+      }
+      ... on PullRequestReviewComment {
+        id
+        body
+        author {
+          login
+        }
+        pullRequest {
+          id
+          number
+          title
+          url
+          repository {
+            name
+            owner {
+              login
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// Helper function to convert GitHub node ID to LinkedIssues format
+export async function fetchIssueFromId(context: Context, nodeId: string): Promise<LinkedIssues | null> {
+  try {
+    const { octokit } = context;
+    const response = await octokit.graphql<IssueSearchResult>(GET_ISSUE_BY_ID, { id: nodeId });
+    const issue = response.node;
+
+    if (!issue) return null;
+
+    return {
+      issueNumber: issue.number,
+      repo: issue.repository.name,
+      owner: issue.repository.owner.login,
+      url: issue.url,
+      body: issue.body,
+      comments: issue.comments.nodes.map((comment) => ({
+        id: comment.id,
+        body: comment.body,
+        user: { login: comment.author?.login },
+        org: issue.repository.owner.login,
+        repo: issue.repository.name,
+        issueUrl: issue.url,
+        commentType: "issue_comment",
+      })),
+    };
+  } catch (error: unknown) {
+    context.logger.error("Error fetching issue by ID", { error: error instanceof Error ? error : Error("Unknown Error"), nodeId });
+    return null;
+  }
+}
+
+// Helper function to convert GitHub node ID to SimplifiedComment format
+export async function fetchCommentFromId(context: Context, nodeId: string): Promise<SimplifiedComment | null> {
+  try {
+    const { octokit } = context;
+    const response = await octokit.graphql<CommentIssueSearchResult>(GET_COMMENT_BY_ID, { id: nodeId });
+    const comment = response.node;
+
+    if (!comment) return null;
+
+    const isIssueOrPr = comment.issue || comment.pullRequest;
+
+    if (!isIssueOrPr) {
+      context.logger.error("Comment has no associated issue or PR", { commentId: comment.id });
+      return null;
+    }
+
+    return {
+      id: comment.id,
+      body: comment.body,
+      user: { login: comment.author?.login },
+      org: isIssueOrPr.repository.owner.login,
+      repo: isIssueOrPr.repository.name,
+      issueUrl: isIssueOrPr.url,
+      commentType: comment.issue ? "issue_comment" : "pull_request_review_comment",
+    };
+  } catch (error) {
+    context.logger.error("Error fetching comment by ID", { error: error instanceof Error ? error : Error("Unknown Error"), nodeId });
+    return null;
+  }
+}
+
+export async function fetchSimilarContent(
+  context: Context,
+  similarIssues: Array<{ issue_id: string; similarity: number; text_similarity: number }>,
+  similarComments: Array<{ comment_id: string; similarity: number; text_similarity: number; comment_issue_id: string }>
+): Promise<{ similarIssues: SimilarIssue[]; similarComments: SimilarComment[] }> {
+  const fetchedIssues: SimilarIssue[] = [];
+  const fetchedComments: SimilarComment[] = [];
+
+  // Fetch similar issues
+  for (const issue of similarIssues) {
+    const fetchedIssue = await fetchIssueFromId(context, issue.issue_id);
+    if (fetchedIssue) {
+      fetchedIssues.push({
+        ...fetchedIssue,
+        similarity: issue.similarity,
+        text_similarity: issue.text_similarity,
+        issue_id: issue.issue_id,
+      });
+    }
+  }
+
+  // Fetch similar comments
+  for (const comment of similarComments) {
+    const fetchedComment = await fetchCommentFromId(context, comment.comment_id);
+    if (fetchedComment) {
+      fetchedComments.push({
+        ...fetchedComment,
+        similarity: comment.similarity,
+        text_similarity: comment.text_similarity,
+        comment_id: comment.comment_id,
+        comment_issue_id: comment.comment_issue_id,
+      });
+    }
+  }
+
+  return {
+    similarIssues: fetchedIssues,
+    similarComments: fetchedComments,
+  };
 }
 
 export async function fetchIssueComments(params: FetchParams, tokenLimits?: TokenLimits) {

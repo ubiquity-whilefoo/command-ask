@@ -1,11 +1,10 @@
 import { Context } from "../types";
 import { CompletionsType } from "../adapters/openai/helpers/completions";
-import { CommentSimilaritySearchResult } from "../adapters/supabase/helpers/comment";
-import { IssueSimilaritySearchResult } from "../adapters/supabase/helpers/issues";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
 import { bubbleUpErrorComment, logger } from "../helpers/errors";
+import { fetchSimilarContent } from "../helpers/issue-fetching";
 
 export async function askQuestion(context: Context, question: string): Promise<CompletionsType> {
   if (!question) {
@@ -34,27 +33,29 @@ export async function askQuestion(context: Context, question: string): Promise<C
     availableTokens -= basePromptTokens;
     logger.debug(`Base prompt tokens: ${basePromptTokens}`);
 
-    // Find similar comments and issues
-    const [similarComments, similarIssues] = await Promise.all([
+    // Find similar comments and issues from Supabase
+    const [similarCommentsSearch, similarIssuesSearch] = await Promise.all([
       comment.findSimilarComments(question, 1 - similarityThreshold, ""),
       issue.findSimilarIssues(question, 1 - similarityThreshold, ""),
     ]);
 
-    //Simialr comments and issues tokens
-    logger.debug(`Similar comments: ${JSON.stringify(similarComments)}`);
-    logger.debug(`Similar issues: ${JSON.stringify(similarIssues)}`);
+    // Fetch full content for similar items using GitHub API
+    const { similarIssues, similarComments } = await fetchSimilarContent(context, similarIssuesSearch || [], similarCommentsSearch || []);
 
-    // Combine and calculate similar text tokens
+    logger.debug(`Fetched similar comments: ${JSON.stringify(similarComments)}`);
+    logger.debug(`Fetched similar issues: ${JSON.stringify(similarIssues)}`);
+
+    // Rerank similar content
+    const { similarIssues: rerankedIssues, similarComments: rerankedComments } = await reranker.reRankSimilarContent(question, similarIssues, similarComments);
+
+    // Calculate token usage from reranked content
     const similarText = [
-      ...(similarComments?.map((comment: CommentSimilaritySearchResult) => comment.comment_plaintext) || []),
-      ...(similarIssues?.map((issue: IssueSimilaritySearchResult) => issue.issue_plaintext) || []),
+      ...rerankedComments.map((comment) => comment.body).filter((body): body is string => !!body),
+      ...rerankedIssues.map((issue) => issue.body).filter((body): body is string => !!body),
     ];
     const similarTextTokens = await completions.findTokenLength(similarText.join("\n"));
     availableTokens -= similarTextTokens;
     logger.debug(`Similar text tokens: ${similarTextTokens}`);
-
-    // Rerank similar text
-    const rerankedText = similarText.length > 0 ? await reranker.reRankResults(similarText, question) : [];
 
     // Gather repository data and calculate ground truths
     const [languages, { dependencies, devDependencies }] = await Promise.all([fetchRepoLanguageStats(context), fetchRepoDependencies(context)]);
@@ -75,12 +76,12 @@ export async function askQuestion(context: Context, question: string): Promise<C
     availableTokens -= groundTruthsTokens;
     logger.debug(`Ground truths tokens: ${groundTruthsTokens}`);
 
-    // Get formatted chat history with remaining tokens
-    const formattedChat = await formatChatHistory(context, maxDepth, availableTokens);
+    // Get formatted chat history with remaining tokens and reranked content
+    const formattedChat = await formatChatHistory(context, maxDepth, availableTokens, rerankedIssues, rerankedComments);
     logger.debug("Formatted chat history: " + formattedChat.join("\n"));
 
     // Create completion with all components
-    return await completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);
+    return await completions.createCompletion(question, model, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);
   } catch (error) {
     throw bubbleUpErrorComment(context, error, false);
   }

@@ -6,6 +6,8 @@ import { logger } from "./errors";
 import { Issue } from "../types/github-types";
 import { updateTokenCount, createDefaultTokenLimits } from "./token-utils";
 
+import { SimilarIssue, SimilarComment } from "../types/github-types";
+
 interface TreeNode {
   key: string;
   issue: Issue;
@@ -14,7 +16,8 @@ interface TreeNode {
   depth: number;
   comments?: StreamlinedComment[];
   body?: string;
-  similarIssues?: Issue[];
+  similarIssues?: SimilarIssue[];
+  similarComments?: SimilarComment[];
   codeSnippets?: { body: string; path: string }[];
   readmeSection?: string;
 }
@@ -272,8 +275,52 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
   const childPrefix = prefix + (node.parent ? "    " : "");
   const contentPrefix = childPrefix + "    ";
 
-  // Process body if exists and within token limits
-  if (node.body?.trim()) {
+  // Process body and similar content for root node
+  if (!node.parent) {
+    // Process body if exists
+    if (node.body?.trim()) {
+      const bodyContent = formatContent("Body", node.body, childPrefix, contentPrefix, tokenLimits);
+      if (bodyContent.length > 0) {
+        output.push(...bodyContent);
+        output.push("");
+      }
+    }
+
+    // Process similar issues
+    if (node.similarIssues?.length) {
+      output.push(`${childPrefix}Similar Issues:`);
+      for (const issue of node.similarIssues) {
+        const line = `${contentPrefix}- Issue #${issue.issueNumber} (${issue.url}) - Similarity: ${(issue.similarity * 100).toFixed(2)}%`;
+        if (!updateTokenCount(line, tokenLimits)) break;
+        output.push(line);
+
+        if (issue.body) {
+          const bodyLine = `${contentPrefix}  ${issue.body.split("\n")[0]}...`;
+          if (!updateTokenCount(bodyLine, tokenLimits)) break;
+          output.push(bodyLine);
+        }
+      }
+      output.push("");
+    }
+
+    // Process similar comments
+    if (node.similarComments?.length) {
+      output.push(`${childPrefix}Similar Comments:`);
+      for (const comment of node.similarComments) {
+        const line = `${contentPrefix}- Comment by ${comment.user?.login} - Similarity: ${(comment.similarity * 100).toFixed(2)}%`;
+        if (!updateTokenCount(line, tokenLimits)) break;
+        output.push(line);
+
+        if (comment.body) {
+          const bodyLine = `${contentPrefix}  ${comment.body.split("\n")[0]}...`;
+          if (!updateTokenCount(bodyLine, tokenLimits)) break;
+          output.push(bodyLine);
+        }
+      }
+      output.push("");
+    }
+  } else if (node.body?.trim()) {
+    // Process body for non-root nodes
     const bodyContent = formatContent("Body", node.body, childPrefix, contentPrefix, tokenLimits);
     if (bodyContent.length > 0) {
       output.push(...bodyContent);
@@ -363,23 +410,12 @@ function formatContent(type: string, content: string, prefix: string, contentPre
   return output;
 }
 
-export async function formatChatHistory(context: Context, maxDepth: number = 2, availableTokens?: number): Promise<string[]> {
+export async function buildChatHistoryTree(context: Context, maxDepth: number = 2): Promise<{ tree: TreeNode | null; tokenLimits: TokenLimits }> {
   const specAndBodies: Record<string, string> = {};
-  const fetchTokenLimits = createDefaultTokenLimits(context);
+  const tokenLimits = createDefaultTokenLimits(context);
+  const { tree } = await buildTree(context, specAndBodies, maxDepth, tokenLimits);
 
-  // If availableTokens is provided, override the default tokensRemaining
-  if (availableTokens !== undefined) {
-    fetchTokenLimits.tokensRemaining = availableTokens;
-  }
-
-  const { tree } = await buildTree(context, specAndBodies, maxDepth, fetchTokenLimits);
-  if (!tree) {
-    return ["No main issue found."];
-  }
-
-  logger.debug(`Tokens: ${fetchTokenLimits.runningTokenCount}/${fetchTokenLimits.tokensRemaining}`);
-
-  if ("pull_request" in context.payload) {
+  if (tree && "pull_request" in context.payload) {
     const { diff_hunk, position, original_position, path, body } = context.payload.comment || {};
     if (diff_hunk) {
       tree.body += `\nPrimary Context: ${body || ""}\nDiff: ${diff_hunk}\nPath: ${path || ""}\nLines: ${position || ""}-${original_position || ""}`;
@@ -387,13 +423,40 @@ export async function formatChatHistory(context: Context, maxDepth: number = 2, 
     }
   }
 
+  return { tree, tokenLimits };
+}
+
+export async function formatChatHistory(
+  context: Context,
+  maxDepth: number = 2,
+  availableTokens?: number,
+  similarIssues?: SimilarIssue[],
+  similarComments?: SimilarComment[]
+): Promise<string[]> {
+  const { tree, tokenLimits } = await buildChatHistoryTree(context, maxDepth);
+
+  if (!tree) {
+    return ["No main issue found."];
+  }
+
+  // If availableTokens is provided, override the default tokensRemaining
+  if (availableTokens !== undefined) {
+    tokenLimits.tokensRemaining = availableTokens;
+  }
+
+  // Add similar issues and comments to the tree
+  if (similarIssues?.length) {
+    tree.similarIssues = similarIssues;
+  }
+  if (similarComments?.length) {
+    tree.similarComments = similarComments;
+  }
+
   const treeOutput: string[] = [];
   const headerLine = "Issue Tree Structure:";
   treeOutput.push(headerLine, "");
 
-  // Create new token limits for formatting phase to avoid double counting
-  const formatTokenLimits = createDefaultTokenLimits(context);
-  await processTreeNode(tree, "", treeOutput, formatTokenLimits);
-  logger.debug(`Final tokens: ${formatTokenLimits.runningTokenCount}/${formatTokenLimits.tokensRemaining}`);
+  await processTreeNode(tree, "", treeOutput, tokenLimits);
+  logger.debug(`Final tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
   return treeOutput;
 }

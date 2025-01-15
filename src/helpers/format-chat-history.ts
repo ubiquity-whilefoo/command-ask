@@ -128,7 +128,9 @@ async function buildTree(
   context: Context,
   specAndBodies: Record<string, string>,
   maxDepth: number = 2,
-  tokenLimit: TokenLimits
+  tokenLimit: TokenLimits,
+  similarIssues?: SimilarIssue[],
+  similarComments?: SimilarComment[]
 ): Promise<{ tree: TreeNode | null }> {
   const processedNodes = new Map<string, TreeNode>();
   // Extract issue/PR number based on payload type
@@ -155,7 +157,7 @@ async function buildTree(
     return { tree: null };
   }
 
-  async function createNode(key: string, depth: number = 0): Promise<TreeNode | null> {
+  async function createNode(key: string, depth: number = 0, refs?: Set<string>): Promise<TreeNode | null> {
     // Early return checks to prevent unnecessary processing
     if (depth > maxDepth || processingStack.has(key)) {
       // Processing stack is used to prevent infinite loops
@@ -206,7 +208,7 @@ async function buildTree(
       processedNodes.set(key, node);
       linkedIssueKeys.add(key);
 
-      const references = new Set<string>();
+      const references = refs || new Set<string>();
 
       // Helper function to validate and add references
       const validateAndAddReferences = async (text: string) => {
@@ -251,9 +253,45 @@ async function buildTree(
       processingStack.delete(key);
     }
   }
+  const similarRefMap = new Set<string>();
+  try {
+    //Extract Refs from similar issues and comments
+    if (similarIssues) {
+      for (const issue of similarIssues) {
+        const { owner, repo, body } = issue;
+        if (!owner || !repo || !body) {
+          continue;
+        }
+        linkedIssueKeys.add(issue.issue_id);
+        const refs = await extractReferencedIssuesAndPrs(body, owner, repo);
+        refs.forEach((ref) => {
+          if (validateGitHubKey(ref) && !linkedIssueKeys.has(ref) && !processedNodes.has(ref) && !processingStack.has(ref)) {
+            similarRefMap.add(ref);
+          }
+        });
+      }
+    }
+    if (similarComments) {
+      for (const comment of similarComments) {
+        const { org, repo, body } = comment;
+        if (!org || !repo || !body) {
+          continue;
+        }
+        linkedIssueKeys.add(comment.comment_issue_id);
+        const refs = await extractReferencedIssuesAndPrs(body, org, repo);
+        refs.forEach((ref) => {
+          if (validateGitHubKey(ref) && !linkedIssueKeys.has(ref) && !processedNodes.has(ref) && !processingStack.has(ref)) {
+            similarRefMap.add(ref);
+          }
+        });
+      }
+    }
+  } catch (error) {
+    logger.error("Error extracting similar issues", { error: error as Error });
+  }
 
   try {
-    const tree = await createNode(mainIssueKey);
+    const tree = await createNode(mainIssueKey, undefined, similarRefMap);
     console.log(`Map size: ${JSON.stringify(Array.from(processedNodes.keys()))}`);
     return { tree };
   } catch (error) {
@@ -295,7 +333,7 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
         output.push(line);
 
         if (issue.body) {
-          const bodyLine = `${contentPrefix}  ${issue.body.split("\n")[0]}...`;
+          const bodyLine = `${contentPrefix}  ${issue.body}`;
           if (!updateTokenCount(bodyLine, tokenLimits)) break;
           output.push(bodyLine);
         }
@@ -312,7 +350,7 @@ async function processTreeNode(node: TreeNode, prefix: string, output: string[],
         output.push(line);
 
         if (comment.body) {
-          const bodyLine = `${contentPrefix}  ${comment.body.split("\n")[0]}...`;
+          const bodyLine = `${contentPrefix}  ${comment.body}`;
           if (!updateTokenCount(bodyLine, tokenLimits)) break;
           output.push(bodyLine);
         }

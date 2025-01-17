@@ -1,31 +1,14 @@
 import { Context } from "../types";
-import { StreamlinedComment, TokenLimits } from "../types/llm";
+import { TokenLimits } from "../types/llm";
 import { fetchIssueComments } from "./issue-fetching";
 import { splitKey } from "./issue";
 import { logger } from "./errors";
-import { PullRequestDetails } from "../types/github-types";
+import { TreeNode } from "../types/github-types";
 import { updateTokenCount, createDefaultTokenLimits } from "./token-utils";
 import { SimilarIssue, SimilarComment } from "../types/github-types";
 
 const SIMILAR_ISSUE_IDENTIFIER = "Similar Issues:";
 const SIMILAR_COMMENT_IDENTIFIER = "Similar Comments:";
-
-export interface TreeNode {
-  key: string;
-  children: TreeNode[];
-  number: number;
-  html_url: string;
-  depth: number;
-  parent?: TreeNode;
-  type: "issue" | "pull_request";
-  comments?: StreamlinedComment[];
-  body?: string;
-  prDetails?: PullRequestDetails;
-  similarIssues?: SimilarIssue[];
-  similarComments?: SimilarComment[];
-  codeSnippets?: { body: string; path: string }[];
-  readmeSection?: string;
-}
 
 function validateGitHubKey(key: string): boolean {
   const parts = key.split("/");

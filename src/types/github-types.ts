@@ -1,5 +1,6 @@
 import { RestEndpointMethodTypes } from "@octokit/rest";
 import { Context } from "./context";
+import { StreamlinedComment } from "./llm";
 
 type BaseIssue = RestEndpointMethodTypes["issues"]["get"]["response"]["data"];
 export interface Issue extends BaseIssue {
@@ -57,16 +58,6 @@ export type SimplifiedComment = {
   commentType?: "issue_comment" | "pull_request_review_comment";
 };
 
-export type FetchedCodes = {
-  body: string | undefined;
-  user: Partial<User> | null;
-  issueUrl: string;
-  id: string;
-  org: string;
-  repo: string;
-  issueNumber: number;
-};
-
 export interface SimilarIssue extends LinkedIssues {
   similarity: number;
   text_similarity: number;
@@ -81,28 +72,20 @@ export interface SimilarComment extends SimplifiedComment {
 }
 
 export interface TreeNode {
-  issue: LinkedIssues;
-  children: string[];
-  depth: number;
-  parent?: string;
-  status: "pending" | "processed" | "error";
-  errorReason?: string;
-  metadata: {
-    processedAt: Date;
-    fetchDuration?: number;
-    commentCount: number;
-    linkedIssuesCount: number;
-    hasCodeReferences: boolean;
-    similarIssues?: SimilarIssue[];
-    similarComments?: SimilarComment[];
-  };
-}
-
-export interface TreeProcessingQueue {
   key: string;
+  children: TreeNode[];
+  number: number;
+  html_url: string;
   depth: number;
-  parent?: string;
-  priority: number;
+  parent?: TreeNode;
+  type: "issue" | "pull_request";
+  comments?: StreamlinedComment[];
+  body?: string;
+  prDetails?: PullRequestDetails;
+  similarIssues?: SimilarIssue[];
+  similarComments?: SimilarComment[];
+  codeSnippets?: { body: string; path: string }[];
+  readmeSection?: string;
 }
 
 export interface IssueSearchResult {

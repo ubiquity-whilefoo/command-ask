@@ -2,7 +2,7 @@ import { VoyageAIClient } from "voyageai";
 import { Context } from "../../../types";
 import { SimilarIssue, SimilarComment } from "../../../types/github-types";
 import { SuperVoyage } from "./voyage";
-import { TreeNode } from "../../../helpers/format-chat-history";
+import { TreeNode } from "../../../types/github-types";
 
 interface DocumentWithMetadata {
   document: string;

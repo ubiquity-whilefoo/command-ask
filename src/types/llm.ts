@@ -34,7 +34,7 @@ export type GroundTruthsSystemMessageTemplate = {
 };
 
 export type StreamlinedComment = {
-  id: string | number;
+  id: string;
   user?: string;
   body?: string;
   org: string;

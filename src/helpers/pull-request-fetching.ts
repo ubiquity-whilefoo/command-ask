@@ -1,73 +1,8 @@
 import { Context } from "../types";
-import { FetchParams, SimplifiedComment } from "../types/github-types";
+import { FetchParams, PullRequestGraphQlResponse, PullRequestLinkedIssue, SimplifiedComment } from "../types/github-types";
 import { TokenLimits } from "../types/llm";
 import { logger } from "./errors";
 import { processPullRequestDiff } from "./pull-request-parsing";
-
-interface PullRequestGraphQlResponse {
-  repository: {
-    pullRequest: {
-      body: string;
-      closingIssuesReferences: {
-        nodes: Array<{
-          number: number;
-          url: string;
-          body: string;
-          repository: {
-            owner: {
-              login: string;
-            };
-            name: string;
-          };
-        }>;
-      };
-      reviews: {
-        pageInfo: {
-          hasNextPage: boolean;
-          endCursor: string | null;
-        };
-        nodes: Array<{
-          comments: {
-            nodes: Array<{
-              id: string;
-              body: string;
-              author: {
-                login: string;
-                type: string;
-              };
-              path?: string;
-              line?: number;
-              startLine?: number;
-              diffHunk?: string;
-            }>;
-          };
-        }>;
-      };
-      comments: {
-        pageInfo: {
-          hasNextPage: boolean;
-          endCursor: string | null;
-        };
-        nodes: Array<{
-          id: string;
-          body: string;
-          author: {
-            login: string;
-            type: string;
-          };
-        }>;
-      };
-    };
-  };
-}
-
-interface PullRequestLinkedIssue {
-  number: number;
-  owner: string;
-  repo: string;
-  url: string;
-  body: string;
-}
 
 /**
  * Fetch both PR review comments and regular PR comments

@@ -3,19 +3,24 @@ import { StreamlinedComment, TokenLimits } from "../types/llm";
 import { fetchIssueComments } from "./issue-fetching";
 import { splitKey } from "./issue";
 import { logger } from "./errors";
-import { Issue } from "../types/github-types";
+import { PullRequestDetails } from "../types/github-types";
 import { updateTokenCount, createDefaultTokenLimits } from "./token-utils";
-
 import { SimilarIssue, SimilarComment } from "../types/github-types";
 
-interface TreeNode {
+const SIMILAR_ISSUE_IDENTIFIER = "Similar Issues:";
+const SIMILAR_COMMENT_IDENTIFIER = "Similar Comments:";
+
+export interface TreeNode {
   key: string;
-  issue: Issue;
   children: TreeNode[];
-  parent?: TreeNode;
+  number: number;
+  html_url: string;
   depth: number;
+  parent?: TreeNode;
+  type: "issue" | "pull_request";
   comments?: StreamlinedComment[];
   body?: string;
+  prDetails?: PullRequestDetails;
   similarIssues?: SimilarIssue[];
   similarComments?: SimilarComment[];
   codeSnippets?: { body: string; path: string }[];
@@ -194,14 +199,16 @@ async function buildTree(
 
       const node: TreeNode = {
         key,
-        issue,
         children: [],
         depth,
+        number: issue.number,
+        html_url: issue.html_url,
         comments: response.comments.map((comment) => ({
           ...comment,
           user: comment.user?.login || undefined,
           body: comment.body || undefined,
         })),
+        type: issue.pull_request ? "pull_request" : "issue",
         body: specAndBodies[key] || issue.body || undefined,
       };
 
@@ -300,129 +307,190 @@ async function buildTree(
   }
 }
 
-async function processTreeNode(node: TreeNode, prefix: string, output: string[], tokenLimits: TokenLimits): Promise<void> {
-  // Create header
-  const typeStr = node.issue.pull_request ? "PR" : "Issue";
-  const headerLine = `${prefix}${node.parent ? "└── " : ""}${typeStr} #${node.issue.number} (${node.issue.html_url})`;
+// Helper function to process node content
+async function processNodeContent(
+  node: TreeNode,
+  prefix: string,
+  includeDiffs: boolean,
+  tokenLimits: TokenLimits
+): Promise<{ output: string[]; isSuccess: boolean; childrenOutput: string[]; tokenLimits: TokenLimits }> {
+  const testTokenLimits = { ...tokenLimits };
+  const output: string[] = [];
+  const childrenOutput: string[] = [];
 
-  if (!updateTokenCount(headerLine, tokenLimits)) {
-    return;
+  // Early token limit check
+  if (testTokenLimits.runningTokenCount >= testTokenLimits.tokensRemaining) {
+    return { output, isSuccess: false, childrenOutput, tokenLimits: testTokenLimits };
+  }
+
+  // Essential information first
+  const typeStr = node.type == "issue" ? "Issue" : "PR";
+  const headerLine = `${prefix}${node.parent ? "└── " : ""}${typeStr} #${node.number} (${node.html_url})`;
+
+  if (!updateTokenCount(headerLine, testTokenLimits)) {
+    return { output, isSuccess: false, childrenOutput, tokenLimits: testTokenLimits };
   }
   output.push(headerLine);
 
   const childPrefix = prefix + (node.parent ? "    " : "");
   const contentPrefix = childPrefix + "    ";
 
-  // Process body and similar content for root node
-  if (!node.parent) {
-    // Process body if exists
-    if (node.body?.trim()) {
-      const bodyContent = formatContent("Body", node.body, childPrefix, contentPrefix, tokenLimits);
-      if (bodyContent.length > 0) {
-        output.push(...bodyContent);
-        output.push("");
-      }
+  // Helper function to add content if tokens allow
+  const tryAddContent = (content: string[], tokenLimit: TokenLimits): boolean => {
+    const tempLimit = { ...tokenLimit };
+    if (content.every((line) => updateTokenCount(line, tempLimit))) {
+      content.forEach((line) => updateTokenCount(line, tokenLimit));
+      output.push(...content);
+      return true;
     }
+    return false;
+  };
 
-    // Process similar issues
-    if (node.similarIssues?.length) {
-      output.push(`${childPrefix}Similar Issues:`);
-      for (const issue of node.similarIssues) {
-        const line = `${contentPrefix}- Issue #${issue.issueNumber} (${issue.url}) - Similarity: ${(issue.similarity * 100).toFixed(2)}%`;
-        if (!updateTokenCount(line, tokenLimits)) break;
-        output.push(line);
-
-        if (issue.body) {
-          const bodyLine = `${contentPrefix}  ${issue.body}`;
-          if (!updateTokenCount(bodyLine, tokenLimits)) break;
-          output.push(bodyLine);
-        }
-      }
-      output.push("");
-    }
-
-    // Process similar comments
-    if (node.similarComments?.length) {
-      output.push(`${childPrefix}Similar Comments:`);
-      for (const comment of node.similarComments) {
-        const line = `${contentPrefix}- Comment by ${comment.user?.login} - Similarity: ${(comment.similarity * 100).toFixed(2)}%`;
-        if (!updateTokenCount(line, tokenLimits)) break;
-        output.push(line);
-
-        if (comment.body) {
-          const bodyLine = `${contentPrefix}  ${comment.body}`;
-          if (!updateTokenCount(bodyLine, tokenLimits)) break;
-          output.push(bodyLine);
-        }
-      }
-      output.push("");
-    }
-  } else if (node.body?.trim()) {
-    // Process body for non-root nodes
-    const bodyContent = formatContent("Body", node.body, childPrefix, contentPrefix, tokenLimits);
-    if (bodyContent.length > 0) {
-      output.push(...bodyContent);
+  // Process body (truncate if needed)
+  if (node.body?.trim()) {
+    const bodyLines = formatContent("Body", node.body, childPrefix, contentPrefix, testTokenLimits);
+    if (bodyLines.length > 0) {
+      tryAddContent(bodyLines, testTokenLimits);
       output.push("");
     }
   }
 
-  // Process PR details if available
-  if (node.issue.prDetails) {
-    const { diff } = node.issue.prDetails;
-
-    // Add diff information
-    if (diff) {
-      const diffContent = formatContent("Diff", diff, childPrefix, contentPrefix, tokenLimits);
-      if (diffContent.length > 0) {
-        output.push(...diffContent);
-        output.push("");
-      }
+  // Process PR diffs if space allows
+  if (includeDiffs && node.type === "pull_request" && node.prDetails?.diff) {
+    const diffLines = formatContent("Diff", node.prDetails.diff, childPrefix, contentPrefix, testTokenLimits);
+    if (diffLines.length > 0) {
+      tryAddContent(diffLines, testTokenLimits);
+      output.push("");
     }
   }
 
-  // Process comments if any
+  // Process comments (most recent first)
   if (node.comments?.length) {
     const commentsHeader = `${childPrefix}Comments: ${node.comments.length}`;
-    if (updateTokenCount(commentsHeader, tokenLimits)) {
+    if (updateTokenCount(commentsHeader, testTokenLimits)) {
       output.push(commentsHeader);
 
-      for (let i = 0; i < node.comments.length; i++) {
-        const comment = node.comments[i];
+      // Sort comments by recency
+      const sortedComments = [...node.comments].sort((a, b) => parseInt(b.id) - parseInt(a.id));
+
+      for (const comment of sortedComments) {
         if (!comment.body?.trim()) continue;
 
-        const commentPrefix = i === node.comments.length - 1 ? "└── " : "├── ";
-        let commentLine = `${childPrefix}${commentPrefix}${comment.commentType || "issuecomment"}-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
+        const commentLine = `${childPrefix}├── ${comment.commentType || "issuecomment"}-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
 
-        // Add referenced code for PR review comments if available
-        if (comment.commentType === "pull_request_review_comment" && comment.referencedCode) {
-          const lineNumbers = `Lines ${comment.referencedCode.startLine}-${comment.referencedCode.endLine}:`;
-          const codePath = `Referenced code in ${comment.referencedCode.path}:`;
-          const content = comment.referencedCode.content.split("\n");
-          const indentedContent = content.map((line) => childPrefix + "    " + line).join("\n");
-          const codeLines = [childPrefix + "    " + codePath, childPrefix + "    " + lineNumbers, childPrefix + "    " + indentedContent];
-
-          if (!updateTokenCount(codeLines.join("\n"), tokenLimits)) {
-            break;
-          }
-          commentLine = `${commentLine}\n${codeLines.join("\n")}`;
-        }
-
-        if (!updateTokenCount(commentLine, tokenLimits)) {
+        if (!updateTokenCount(commentLine, testTokenLimits)) {
           break;
         }
         output.push(commentLine);
+
+        // Add referenced code if space allows
+        if (includeDiffs && comment.commentType === "pull_request_review_comment" && comment.referencedCode) {
+          const codeLines = [
+            `${childPrefix}    Referenced code in ${comment.referencedCode.path}:`,
+            `${childPrefix}    Lines ${comment.referencedCode.startLine}-${comment.referencedCode.endLine}:`,
+            ...comment.referencedCode.content.split("\n").map((line) => `${childPrefix}    ${line}`),
+          ];
+
+          tryAddContent(codeLines, testTokenLimits);
+        }
       }
       output.push("");
     }
   }
 
-  // Process children
-  for (let i = 0; i < node.children.length; i++) {
-    const child = node.children[i];
-    const isLast = i === node.children.length - 1;
-    const nextPrefix = childPrefix + (isLast ? "    " : "│   ");
-    await processTreeNode(child, nextPrefix, output, tokenLimits);
+  // Process similar content only for root node if space allows
+  if (!node.parent && testTokenLimits.runningTokenCount < testTokenLimits.tokensRemaining - 1000) {
+    for (const [type, items] of [
+      [SIMILAR_ISSUE_IDENTIFIER, node.similarIssues],
+      [SIMILAR_COMMENT_IDENTIFIER, node.similarComments],
+    ] as const) {
+      if (!items?.length) continue;
+
+      const typeHeader = `${childPrefix}${type}:`;
+      if (!updateTokenCount(typeHeader, testTokenLimits)) break;
+      output.push(typeHeader);
+
+      // Sort by similarity
+      const sortedItems = [...items].sort((a, b) => b.similarity - a.similarity);
+
+      for (const item of sortedItems) {
+        const similarity = (item.similarity * 100).toFixed(2);
+        const identifier =
+          type === SIMILAR_ISSUE_IDENTIFIER ? "Issue #" + (item as SimilarIssue).issueNumber : "Comment by " + (item as SimilarComment).user?.login;
+        const url = type === SIMILAR_ISSUE_IDENTIFIER ? (item as SimilarIssue).url : "";
+
+        const itemHeader = contentPrefix + "- " + identifier;
+        const urlPart = url ? " (" + url + ")" : "";
+        const similarityPart = " - Similarity: " + similarity + "%";
+        const itemLines = [itemHeader + urlPart + similarityPart];
+
+        if (item.body) {
+          const maxLength = 500;
+          const truncatedBody = item.body.length > maxLength ? item.body.slice(0, maxLength) + "..." : item.body;
+          itemLines.push(contentPrefix + "  " + truncatedBody);
+        }
+
+        if (!tryAddContent(itemLines, testTokenLimits)) {
+          break;
+        }
+      }
+      output.push("");
+    }
   }
+
+  const isSuccess = testTokenLimits.runningTokenCount <= testTokenLimits.tokensRemaining;
+  return { output, isSuccess, childrenOutput, tokenLimits: testTokenLimits };
+}
+
+async function processTreeNode(node: TreeNode, prefix: string, output: string[], tokenLimits: TokenLimits): Promise<boolean> {
+  // Early check for token limit
+  if (tokenLimits.runningTokenCount >= tokenLimits.tokensRemaining) {
+    return false;
+  }
+
+  // Process current node first to ensure most relevant content is included
+  const result = await processNodeContent(node, prefix, false, tokenLimits); // Start without diffs
+
+  if (result.isSuccess) {
+    // If we have room for diffs and it's a PR, try adding them
+    if (node.type === "pull_request" && tokenLimits.tokensRemaining - tokenLimits.runningTokenCount > 1000) {
+      // Buffer for diffs
+      const withDiffs = await processNodeContent(node, prefix, true, { ...tokenLimits });
+      if (withDiffs.isSuccess) {
+        output.push(...withDiffs.output);
+        Object.assign(tokenLimits, withDiffs.tokenLimits);
+      } else {
+        output.push(...result.output);
+        Object.assign(tokenLimits, result.tokenLimits);
+      }
+    } else {
+      output.push(...result.output);
+      Object.assign(tokenLimits, result.tokenLimits);
+    }
+
+    // Process children only if we have enough tokens left
+    if (tokenLimits.runningTokenCount < tokenLimits.tokensRemaining) {
+      // Sort children by recency (assuming newer items are more relevant)
+      const sortedChildren = [...node.children].sort((a, b) => b.number - a.number);
+
+      for (const child of sortedChildren) {
+        // Check if we have enough tokens for more content
+        if (tokenLimits.runningTokenCount >= tokenLimits.tokensRemaining - 500) {
+          // Leave buffer
+          break;
+        }
+
+        const isChildProcessingComplete = await processTreeNode(child, prefix + "  ", output, tokenLimits);
+        if (!isChildProcessingComplete) {
+          break;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 function formatContent(type: string, content: string, prefix: string, contentPrefix: string, tokenLimits: TokenLimits): string[] {
@@ -448,16 +516,21 @@ function formatContent(type: string, content: string, prefix: string, contentPre
   return output;
 }
 
-export async function buildChatHistoryTree(context: Context, maxDepth: number = 2): Promise<{ tree: TreeNode | null; tokenLimits: TokenLimits }> {
+export async function buildChatHistoryTree(
+  context: Context,
+  maxDepth: number = 2,
+  similarComments: SimilarComment[],
+  similarIssues: SimilarIssue[]
+): Promise<{ tree: TreeNode | null; tokenLimits: TokenLimits }> {
   const specAndBodies: Record<string, string> = {};
   const tokenLimits = createDefaultTokenLimits(context);
-  const { tree } = await buildTree(context, specAndBodies, maxDepth, tokenLimits);
+  const { tree } = await buildTree(context, specAndBodies, maxDepth, tokenLimits, similarIssues, similarComments);
 
   if (tree && "pull_request" in context.payload) {
     const { diff_hunk, position, original_position, path, body } = context.payload.comment || {};
     if (diff_hunk) {
       tree.body += `\nPrimary Context: ${body || ""}\nDiff: ${diff_hunk}\nPath: ${path || ""}\nLines: ${position || ""}-${original_position || ""}`;
-      tree.comments = tree.comments?.filter((comment) => comment.id !== context.payload.comment?.id);
+      tree.comments = tree.comments?.filter((comment) => comment.id !== String(context.payload.comment?.id));
     }
   }
 
@@ -467,15 +540,18 @@ export async function buildChatHistoryTree(context: Context, maxDepth: number = 
 export async function formatChatHistory(
   context: Context,
   maxDepth: number = 2,
-  availableTokens?: number,
-  similarIssues?: SimilarIssue[],
-  similarComments?: SimilarComment[]
+  similarIssues: SimilarIssue[],
+  similarComments: SimilarComment[],
+  availableTokens?: number
 ): Promise<string[]> {
-  const { tree, tokenLimits } = await buildChatHistoryTree(context, maxDepth);
+  const { tree, tokenLimits } = await buildChatHistoryTree(context, maxDepth, similarComments, similarIssues);
 
   if (!tree) {
     return ["No main issue found."];
   }
+
+  // Rerank the chat history
+  const reRankedChat = await context.adapters.voyage.reranker.reRankTreeNodes(tree, context.payload.comment.body);
 
   // If availableTokens is provided, override the default tokensRemaining
   if (availableTokens !== undefined) {
@@ -494,7 +570,10 @@ export async function formatChatHistory(
   const headerLine = "Issue Tree Structure:";
   treeOutput.push(headerLine, "");
 
-  await processTreeNode(tree, "", treeOutput, tokenLimits);
-  logger.debug(`Final tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
+  const tokenLimitsnew = createDefaultTokenLimits(context);
+
+  const isSuccess = await processTreeNode(reRankedChat, "", treeOutput, tokenLimitsnew);
+  logger.debug(`Tree processing ${isSuccess ? "succeeded" : "failed"} with tokens: ${tokenLimitsnew.runningTokenCount}/${tokenLimitsnew.tokensRemaining}`);
+  logger.debug(`Tree fetching tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
   return treeOutput;
 }

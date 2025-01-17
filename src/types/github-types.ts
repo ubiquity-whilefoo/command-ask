@@ -25,49 +25,6 @@ type Repository = {
   name: string;
 };
 
-type IssueData = {
-  number: number;
-  url: string;
-  body: string;
-  repository: Repository;
-};
-
-type PullRequestNode = {
-  id: string;
-  body: string;
-  closingIssuesReferences: {
-    nodes: IssueData[];
-  };
-};
-
-type PullRequestReviewCommentNode = {
-  id: string;
-  body: string;
-  pullRequest: PullRequestNode;
-};
-
-type IssueCommentNode = {
-  id: string;
-  body: string;
-  issue: IssueData;
-};
-
-export type GqlIssueSearchResult = {
-  node: IssueData;
-};
-
-export type GqlPullRequestSearchResult = {
-  node: PullRequestNode;
-};
-
-export type GqlPullRequestReviewCommentSearchResult = {
-  node: PullRequestReviewCommentNode;
-};
-
-export type GqlIssueCommentSearchResult = {
-  node: IssueCommentNode;
-};
-
 export interface PullRequestDetails {
   diff: string | null;
 }
@@ -203,4 +160,69 @@ export interface CommentIssueSearchResult {
       };
     };
   };
+}
+
+export interface PullRequestGraphQlResponse {
+  repository: {
+    pullRequest: {
+      body: string;
+      closingIssuesReferences: {
+        nodes: Array<{
+          number: number;
+          url: string;
+          body: string;
+          repository: {
+            owner: {
+              login: string;
+            };
+            name: string;
+          };
+        }>;
+      };
+      reviews: {
+        pageInfo: {
+          hasNextPage: boolean;
+          endCursor: string | null;
+        };
+        nodes: Array<{
+          comments: {
+            nodes: Array<{
+              id: string;
+              body: string;
+              author: {
+                login: string;
+                type: string;
+              };
+              path?: string;
+              line?: number;
+              startLine?: number;
+              diffHunk?: string;
+            }>;
+          };
+        }>;
+      };
+      comments: {
+        pageInfo: {
+          hasNextPage: boolean;
+          endCursor: string | null;
+        };
+        nodes: Array<{
+          id: string;
+          body: string;
+          author: {
+            login: string;
+            type: string;
+          };
+        }>;
+      };
+    };
+  };
+}
+
+export interface PullRequestLinkedIssue {
+  number: number;
+  owner: string;
+  repo: string;
+  url: string;
+  body: string;
 }

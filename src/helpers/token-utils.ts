@@ -3,11 +3,8 @@ import { TokenLimits } from "../types/llm";
 import { encode } from "gpt-tokenizer";
 
 export function createDefaultTokenLimits(context: Context): TokenLimits {
-  // const modelMaxTokenLimit = context.adapters.openai.completions.getModelMaxTokenLimit(context.config.model);
-  // const maxCompletionTokens = context.adapters.openai.completions.getModelMaxOutputLimit(context.config.model);
-
-  const modelMaxTokenLimit = 128_000;
-  const maxCompletionTokens = 16_384;
+  const modelMaxTokenLimit = context.adapters.openai.completions.getModelMaxTokenLimit(context.config.model);
+  const maxCompletionTokens = context.adapters.openai.completions.getModelMaxOutputLimit(context.config.model);
   return {
     modelMaxTokenLimit,
     maxCompletionTokens,

@@ -100,7 +100,7 @@ export async function fetchContext(context: Context, question: string): Promise<
   logger.debug(`Ground truths tokens: ${groundTruthsTokens}`);
 
   // Get formatted chat history with remaining tokens and reranked content
-  const formattedChat = await formatChatHistory(context, maxDepth, availableTokens, rerankedIssues, rerankedComments);
+  const formattedChat = await formatChatHistory(context, maxDepth, rerankedIssues, rerankedComments, availableTokens);
   return {
     formattedChat,
     groundTruths,

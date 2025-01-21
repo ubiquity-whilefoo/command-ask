@@ -1,7 +1,7 @@
 {
   "name": "command-ask",
   "description": "A highly context aware organization integrated chatbot",
-  "ubiquity:listeners": ["issue_comment.created"],
+  "ubiquity:listeners": ["issue_comment.created", "pull_request_review_comment.created"],
   "skipBotEvents": true,
   "commands": {
     "ask": {
@@ -32,8 +32,8 @@
         "default": 0.9,
         "type": "number"
       },
-      "maxTokens": {
-        "default": 10000,
+      "maxDepth": {
+        "default": 3,
         "type": "number"
       }
     }

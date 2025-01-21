@@ -59,32 +59,41 @@ export class Completions extends SuperOpenAi {
     return this.getModelMaxTokenLimit("o1-mini");
   }
 
-  async createCompletion(
-    query: string,
-    model: string = "o1-mini",
-    additionalContext: string[],
-    localContext: string[],
-    groundTruths: string[],
-    botName: string,
-    maxTokens: number
-  ): Promise<CompletionsType> {
-    const numTokens = await this.findTokenLength(query, additionalContext, localContext, groundTruths);
-    logger.info(`Number of tokens: ${numTokens}`);
-
-    const sysMsg = [
+  private _getSystemPromptTemplate(groundTruths: string = "{groundTruths}", botName: string = "{botName}", localContext: string = "{localContext}"): string {
+    return [
       "You Must obey the following ground truths: ",
-      JSON.stringify(groundTruths) + "\n",
+      groundTruths + "\n",
       "You are tasked with assisting as a GitHub bot by generating responses based on provided chat history and similar responses, focusing on using available knowledge within the provided corpus, which may contain code, documentation, or incomplete information. Your role is to interpret and use this knowledge effectively to answer user questions.\n\n# Steps\n\n1. **Understand Context**: Review the chat history and any similar provided responses to understand the context.\n2. **Extract Relevant Information**: Identify key pieces of information, even if they are incomplete, from the available corpus.\n3. **Apply Knowledge**: Use the extracted information and relevant documentation to construct an informed response.\n4. **Draft Response**: Compile the gathered insights into a coherent and concise response, ensuring it's clear and directly addresses the user's query.\n5. **Review and Refine**: Check for accuracy and completeness, filling any gaps with logical assumptions where necessary.\n\n# Output Format\n\n- Concise and coherent responses in paragraphs that directly address the user's question.\n- Incorporate inline code snippets or references from the documentation if relevant.\n\n# Examples\n\n**Example 1**\n\n*Input:*\n- Chat History: \"What was the original reason for moving the LP tokens?\"\n- Corpus Excerpts: \"It isn't clear to me if we redid the staking yet and if we should migrate. If so, perhaps we should make a new issue instead. We should investigate whether the missing LP tokens issue from the MasterChefV2.1 contract is critical to the decision of migrating or not.\"\n\n*Output:*\n\"It was due to missing LP tokens issue from the MasterChefV2.1 Contract.\n\n# Notes\n\n- Ensure the response is crafted from the corpus provided, without introducing information outside of what's available or relevant to the query.\n- Consider edge cases where the corpus might lack explicit answers, and justify responses with logical reasoning based on the existing information.",
       `Your name is: ${botName}`,
       "\n",
-      "Main Context (Provide additional precedence in terms of information): ",
-      localContext.join("\n"),
-      "Secondary Context: ",
-      additionalContext.join("\n"),
+      "Main Context",
+      localContext,
     ].join("\n");
+  }
 
+  async getPromptTokens(query: string = "{query}"): Promise<number> {
+    const systemTemplate = this._getSystemPromptTemplate();
+    const messages = [
+      {
+        role: "system",
+        content: [{ type: "text", text: systemTemplate }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: query }],
+      },
+    ];
+
+    // Convert messages to string to count tokens
+    const messagesStr = JSON.stringify(messages);
+    return encode(messagesStr, { disallowedSpecial: new Set() }).length;
+  }
+
+  async createCompletion(query: string, model: string = "o1-mini", localContext: string[], groundTruths: string[], botName: string): Promise<CompletionsType> {
+    const numTokens = await this.findTokenLength(query, localContext, groundTruths);
+    logger.debug(`Number of tokens: ${numTokens}`);
+    const sysMsg = this._getSystemPromptTemplate(JSON.stringify(groundTruths), botName, localContext.join("\n"));
     logger.info(`System message: ${sysMsg}`);
-    logger.info(`Query: ${query}`);
 
     const res: OpenAI.Chat.Completions.ChatCompletion = await this.client.chat.completions.create({
       model: model,
@@ -109,7 +118,6 @@ export class Completions extends SuperOpenAi {
         },
       ],
       temperature: 0.2,
-      max_tokens: maxTokens,
       top_p: 0.5,
       frequency_penalty: 0,
       presence_penalty: 0,
@@ -118,8 +126,8 @@ export class Completions extends SuperOpenAi {
       },
     });
 
-    if (!res.choices || !res.choices.length) {
-      logger.debug(`No completion found for query: ${query} Response: ${JSON.stringify(res)}`, { res });
+    if (!res.choices || !res.choices[0].message) {
+      logger.error(`Failed to generate completion: ${JSON.stringify(res)}`);
       return { answer: "", tokenUsage: { input: 0, output: 0, total: 0 }, groundTruths };
     }
 
@@ -154,6 +162,11 @@ export class Completions extends SuperOpenAi {
       messages: msgs,
       model: model,
     });
+
+    if (!res.choices || !res.choices[0].message || !res.choices[0].message.content) {
+      this.context.logger.error(`Failed to generate ground truth completion: ${JSON.stringify(res)}`);
+      return null;
+    }
 
     return res.choices[0].message.content;
   }

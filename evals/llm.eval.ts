@@ -12,6 +12,9 @@ import { writeFileSync } from "fs";
 import { fetchContext, formattedHistory, initAdapters } from "./handlers/setup-context";
 import { LOG_LEVEL, Logs } from "@ubiquity-os/ubiquity-os-logger";
 
+import { config } from "dotenv";
+config();
+
 // Required environment variables with type assertion
 const requiredEnvVars = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY as string,
@@ -66,7 +69,6 @@ const inputs = {
   config: {
     model: "gpt-4o",
     similarityThreshold: 0.8,
-    maxTokens: 1000,
   },
   settings: {
     openAiBaseUrl: "https://openrouter.ai/api/v1",
@@ -118,7 +120,7 @@ export async function main() {
               body: scenario.issue.body,
               html_url: scenario.issue.html_url,
               number: scenario.issue.number,
-            } as unknown as Context["payload"]["issue"],
+            } as unknown as Context<"issue_comment.created">["payload"]["issue"],
             sender: scenario.sender,
             repository: {
               name: scenario.repository.name,
@@ -139,20 +141,17 @@ export async function main() {
 
         initialContext = initAdapters(initialContext, clients);
         const chatHistory = await fetchContext(initialContext, scenario.issue.question);
-        const formattedContextHistory = formattedHistory(chatHistory);
         const result = await initialContext.adapters.openai.completions.createCompletion(
           scenario.issue.question,
           initialContext.config.model || "gpt-4o",
-          chatHistory.rerankedText,
           chatHistory.formattedChat,
           chatHistory.groundTruths,
-          initialContext.env.UBIQUITY_OS_APP_NAME,
-          initialContext.config.maxTokens
+          initialContext.env.UBIQUITY_OS_APP_NAME
         );
 
         return {
           output: result.answer,
-          context: formattedContextHistory,
+          context: formattedHistory(chatHistory),
           expected: scenario.expectedResponse,
         };
       },

@@ -12,7 +12,7 @@ export const pluginSettingsSchema = T.Object({
   model: T.String({ default: "o1-mini" }),
   openAiBaseUrl: T.Optional(T.String()),
   similarityThreshold: T.Number({ default: 0.9 }),
-  maxTokens: T.Number({ default: 10000 }),
+  maxDepth: T.Optional(T.Number({ default: 3 })), // max depth of the chat history to be fetched
 });
 
 export type PluginSettings = StaticDecode<typeof pluginSettingsSchema>;

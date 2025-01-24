@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { VoyageAIClient } from "voyageai";
 import OpenAI from "openai";
 import { callCallbacks } from "./helpers/callback-proxy";
-import { issueCommentCreatedCallback } from "./handlers/comment-created-callback";
+import { processCommentCallback } from "./handlers/comment-created-callback";
 
 export async function plugin(context: Context) {
   const { env, config } = context;
@@ -20,7 +20,7 @@ export async function plugin(context: Context) {
   context.adapters = createAdapters(supabase, voyageClient, openaiClient, context);
 
   if (context.command) {
-    return await issueCommentCreatedCallback(context);
+    return await processCommentCallback(context);
   }
   return await callCallbacks(context, context.eventName);
 }

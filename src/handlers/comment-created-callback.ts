@@ -5,7 +5,7 @@ import { CallbackResult } from "../types/proxy";
 import { bubbleUpErrorComment, sanitizeMetadata } from "../helpers/errors";
 import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
 
-export async function issueCommentCreatedCallback(context: Context<"issue_comment.created">): Promise<CallbackResult> {
+export async function processCommentCallback(context: Context<"issue_comment.created" | "pull_request_review_comment.created">): Promise<CallbackResult> {
   const { logger, command, payload } = context;
   let question = "";
 
@@ -39,8 +39,17 @@ export async function issueCommentCreatedCallback(context: Context<"issue_commen
         },
       })
     );
-
-    await addCommentToIssue(context, answer + metadataString);
+    //Check the type of comment
+    if ("pull_request" in payload) {
+      // This is a pull request review comment
+      await addCommentToIssue(context, answer + metadataString, {
+        inReplyTo: {
+          commentId: payload.comment.id,
+        },
+      });
+    } else {
+      await addCommentToIssue(context, answer + metadataString);
+    }
     return { status: 200, reason: logger.info("Comment posted successfully").logMessage.raw };
   } catch (error) {
     throw await bubbleUpErrorComment(context, error, false);

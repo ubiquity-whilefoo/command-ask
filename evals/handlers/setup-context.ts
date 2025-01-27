@@ -22,7 +22,7 @@ export interface EvalClients {
   openai: OpenAI;
 }
 
-export const initAdapters = (context: Context, clients: EvalClients): Context => {
+export function initAdapters(context: Context, clients: EvalClients): Context {
   const adapters = createAdapters(clients.supabase, clients.voyage, clients.openai, context);
   context.adapters = adapters;
 
@@ -35,7 +35,7 @@ export const initAdapters = (context: Context, clients: EvalClients): Context =>
     });
   });
   return context;
-};
+}
 
 export async function fetchContext(context: Context, question: string): Promise<FetchContext> {
   const {

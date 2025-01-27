@@ -201,14 +201,14 @@ async function buildTree(
       const references = refs || new Set<string>();
 
       // Helper function to validate and add references
-      const validateAndAddReferences = async (text: string) => {
+      async function validateAndAddReferences(text: string) {
         const refs = await extractReferencedIssuesAndPrs(text, owner, repo);
         refs.forEach((ref) => {
           if (validateGitHubKey(ref) && !linkedIssueKeys.has(ref) && !processedNodes.has(ref) && !processingStack.has(ref)) {
             references.add(ref);
           }
         });
-      };
+      }
 
       // Process body references
       if (node.body) {
@@ -319,7 +319,7 @@ async function processNodeContent(
   const contentPrefix = childPrefix + "    ";
 
   // Helper function to add content if tokens allow
-  const tryAddContent = (content: string[], tokenLimit: TokenLimits): boolean => {
+  function tryAddContent(content: string[], tokenLimit: TokenLimits): boolean {
     const tempLimit = { ...tokenLimit };
     if (content.every((line) => updateTokenCount(line, tempLimit))) {
       content.forEach((line) => updateTokenCount(line, tokenLimit));
@@ -327,7 +327,7 @@ async function processNodeContent(
       return true;
     }
     return false;
-  };
+  }
 
   // Process body (truncate if needed)
   if (node.body?.trim()) {

@@ -17,9 +17,8 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
     question = command.parameters.question;
   } else if (payload.comment.body.trim().startsWith("/ask")) {
     question = payload.comment.body.trim().replace("/ask", "").trim();
-  }
-  if (!question) {
-    throw logger.error("No question provided");
+  } else if (!question) {
+    return { status: 200, reason: logger.info("No question found in comment. Skipping.").logMessage.raw };
   }
 
   try {

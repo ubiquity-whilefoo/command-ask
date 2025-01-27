@@ -359,7 +359,7 @@ async function processNodeContent(
       for (const comment of sortedComments) {
         if (!comment.body?.trim()) continue;
 
-        const commentLine = `${childPrefix}├── ${comment.commentType || "issuecomment"}-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
+        const commentLine = `${childPrefix}├── ${comment.commentType || "issue_comment"}-${comment.id}: ${comment.user}: ${comment.body.trim()}`;
 
         if (!updateTokenCount(commentLine, testTokenLimits)) {
           break;
@@ -553,10 +553,10 @@ export async function formatChatHistory(
   const headerLine = "Issue Tree Structure:";
   treeOutput.push(headerLine, "");
 
-  const tokenLimitsnew = createDefaultTokenLimits(context);
+  const tokenLimitsNew = createDefaultTokenLimits(context);
 
-  const isSuccess = await processTreeNode(reRankedChat, "", treeOutput, tokenLimitsnew);
-  logger.debug(`Tree processing ${isSuccess ? "succeeded" : "failed"} with tokens: ${tokenLimitsnew.runningTokenCount}/${tokenLimitsnew.tokensRemaining}`);
+  const isSuccess = await processTreeNode(reRankedChat, "", treeOutput, tokenLimitsNew);
+  logger.debug(`Tree processing ${isSuccess ? "succeeded" : "failed"} with tokens: ${tokenLimitsNew.runningTokenCount}/${tokenLimitsNew.tokensRemaining}`);
   logger.debug(`Tree fetching tokens: ${tokenLimits.runningTokenCount}/${tokenLimits.tokensRemaining}`);
   return treeOutput;
 }

@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.1.0](https://github.com/ubiquity-os-marketplace/command-ask/compare/v1.0.0...v1.1.0) (2025-01-11)
+
+### Features
+
+- adds ClosedQA, ContextPrecision ([148a73f](https://github.com/ubiquity-os-marketplace/command-ask/commit/148a73fab8ec0922e833eabde6b1de5d0fddf5ce))
+
+### Bug Fixes
+
+- action ([75a2f87](https://github.com/ubiquity-os-marketplace/command-ask/commit/75a2f87672a77601d5130b38ae34a4f8df9db82f))
+- action ([633ebfe](https://github.com/ubiquity-os-marketplace/command-ask/commit/633ebfe917e0a6f0f042b935b2e56238e6e6572b))
+- action file dir ([a4351af](https://github.com/ubiquity-os-marketplace/command-ask/commit/a4351afc1f1550699a27585bc7cef839b6fd3b18))
+- actions env ([2cb4a14](https://github.com/ubiquity-os-marketplace/command-ask/commit/2cb4a147dad4ba1503760ee0177ad928599b368a))
+- add env to the action ([98d3777](https://github.com/ubiquity-os-marketplace/command-ask/commit/98d37775ec9d570e2fd84b12bbc24a1d0aa24c58))
+- add github token to the braintrust ([2bad0fe](https://github.com/ubiquity-os-marketplace/command-ask/commit/2bad0fee4135072523cd5bd6e1d93c9cc86207cf))
+- add workflow dispatch ([a8922db](https://github.com/ubiquity-os-marketplace/command-ask/commit/a8922dba40ff84d0d9c71f6a602d5d184140f6ef))
+- braintrust action ([a518e5e](https://github.com/ubiquity-os-marketplace/command-ask/commit/a518e5ea4261fe733565731d4499a45a1af8698b))
+- change to /ask ([a5d9302](https://github.com/ubiquity-os-marketplace/command-ask/commit/a5d930219855bd29c8bfec532be1711ba59e3dfb))
+- cspell and knip ([e075c71](https://github.com/ubiquity-os-marketplace/command-ask/commit/e075c71930f039cc3e9abde727cf19d596a3d1d5))
+- deps issues ([a077ad8](https://github.com/ubiquity-os-marketplace/command-ask/commit/a077ad8f7045db7c92ed88b20d5c59e3d07fca5b))
+- downgraded typebox ([122efad](https://github.com/ubiquity-os-marketplace/command-ask/commit/122efaddc3b34c8fb6348e8cab70e78b07c69ad1))
+- evals action ([43e5e50](https://github.com/ubiquity-os-marketplace/command-ask/commit/43e5e50fec15914d05adc0a3aacaf85b9caf8bbc))
+- evals secrets ([2f0cb7a](https://github.com/ubiquity-os-marketplace/command-ask/commit/2f0cb7a86d123ea6c96ef8baca7be19243c94d2a))
+- evals workflow ([fa8934f](https://github.com/ubiquity-os-marketplace/command-ask/commit/fa8934f26b77990f881f27a1a076367c13d2f3af))
+- fix knip ([dd39b3b](https://github.com/ubiquity-os-marketplace/command-ask/commit/dd39b3b25d5a1cd869f08b8f3dc3258ec12e6f09))
+- fixed lockfile ([171e427](https://github.com/ubiquity-os-marketplace/command-ask/commit/171e42797b6ed55d9e7178dc48daea83a5523508))
+- formatting ([cfe8c4d](https://github.com/ubiquity-os-marketplace/command-ask/commit/cfe8c4d165a1d6225cac9e92b7271f55ddaa7d43))
+- github action ([139770e](https://github.com/ubiquity-os-marketplace/command-ask/commit/139770e046829cde75d20b84e3366e5c9647316d))
+- lockfile ([64263de](https://github.com/ubiquity-os-marketplace/command-ask/commit/64263de31897adaaf6b0e3c21edf26b966d4f14b))
+- log env ([1d2309c](https://github.com/ubiquity-os-marketplace/command-ask/commit/1d2309c7d662f0a885353690355ccdffe5e9d43a))
+- ncc compile error ([7ec1087](https://github.com/ubiquity-os-marketplace/command-ask/commit/7ec10877df9b238d6b1db386b8f88baee4fd3eb9))
+- ncc compile error ([fe11d1b](https://github.com/ubiquity-os-marketplace/command-ask/commit/fe11d1beb636dd3ef3964802a50fc96ec2dce298))
+- package.json duplicate items ([4a9df8a](https://github.com/ubiquity-os-marketplace/command-ask/commit/4a9df8a5a07c1c1fff2081e509a4ecc28e7154d1))
+- prettier and jest ([cab2349](https://github.com/ubiquity-os-marketplace/command-ask/commit/cab2349c12f870066171acd5e1ae8bc2615688ac))
+- remove unused deps ([766e23f](https://github.com/ubiquity-os-marketplace/command-ask/commit/766e23f393752345d8aeb48e53552ee5859a701c))
+- removed ClosedQA ([ae6d163](https://github.com/ubiquity-os-marketplace/command-ask/commit/ae6d163593fc1ab6aa4198f9c1dba97fb7284680))
+- setup evals actions ([e61e401](https://github.com/ubiquity-os-marketplace/command-ask/commit/e61e4012095ee9958d3f47298053190f382d10c4))
+- setup evals actions ([5177c29](https://github.com/ubiquity-os-marketplace/command-ask/commit/5177c2959d566e45eef19e9bdc597815595220d3))
+- update permission ([399d80a](https://github.com/ubiquity-os-marketplace/command-ask/commit/399d80a49d52b148113d74d34750702eb911b6d6))
+- update permission ([8dfe444](https://github.com/ubiquity-os-marketplace/command-ask/commit/8dfe444e6486a2f8206385a66239c03043f76e57))
+- update workflow ([75779f8](https://github.com/ubiquity-os-marketplace/command-ask/commit/75779f8840b0c1d92dd0bd2cc4a53c34dbbcbfb6))
+- updated package.json ([022b9ce](https://github.com/ubiquity-os-marketplace/command-ask/commit/022b9ce1998435b2831f75c268601828c58a4f55))
+- updated workflow ([311fc4a](https://github.com/ubiquity-os-marketplace/command-ask/commit/311fc4a3f94baf12af4dc8fbce3e0a6c16ec429e))
+- updated workflow ([58c01ac](https://github.com/ubiquity-os-marketplace/command-ask/commit/58c01ac83df68e9e54497f23e26869a7f6a93988))
+
 ## 1.0.0 (2024-11-29)
 
 ### Features

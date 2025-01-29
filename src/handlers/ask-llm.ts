@@ -1,12 +1,12 @@
-import { Context } from "../types";
 import { CompletionsType } from "../adapters/openai/helpers/completions";
 import { CommentSimilaritySearchResult } from "../adapters/supabase/helpers/comment";
 import { IssueSimilaritySearchResult } from "../adapters/supabase/helpers/issues";
-import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
+import { bubbleUpErrorComment, logger } from "../helpers/errors";
 import { formatChatHistory } from "../helpers/format-chat-history";
+import { recursivelyFetchLinkedIssues } from "../helpers/issue-fetching";
+import { Context } from "../types";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
-import { bubbleUpErrorComment, logger } from "../helpers/errors";
 
 export async function askQuestion(context: Context, question: string) {
   if (!question) {
@@ -18,7 +18,7 @@ export async function askQuestion(context: Context, question: string) {
     owner: context.payload.repository.owner.login,
     repo: context.payload.repository.name,
   });
-  // build a nicely structure system message containing a streamlined chat history
+  // build a nicely structured system message containing a streamlined chat history
   // includes the current issue, any linked issues, and any linked PRs
   const formattedChat = await formatChatHistory(context, streamlinedComments, specAndBodies);
   logger.info(`${formattedChat.join("")}`);
@@ -78,6 +78,6 @@ export async function askLlm(context: Context, question: string, formattedChat: 
     groundTruths = await findGroundTruths(context, "chat-bot", { languages, dependencies, devDependencies });
     return await completions.createCompletion(question, model, rerankedText, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME, maxTokens);
   } catch (error) {
-    throw bubbleUpErrorComment(context, error, false);
+    throw await bubbleUpErrorComment(context, error, false);
   }
 }

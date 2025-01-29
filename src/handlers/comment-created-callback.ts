@@ -1,7 +1,8 @@
-import { postComment } from "@ubiquity-os/plugin-sdk";
-import { bubbleUpErrorComment } from "../helpers/errors";
+import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
+import { bubbleUpErrorComment, sanitizeMetadata } from "../helpers/errors";
 import { Context } from "../types";
 import { CallbackResult } from "../types/proxy";
+import { addCommentToIssue } from "./add-comment";
 import { askQuestion } from "./ask-llm";
 
 export async function processCommentCallback(context: Context<"issue_comment.created" | "pull_request_review_comment.created">): Promise<CallbackResult> {
@@ -21,7 +22,7 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
   }
 
   try {
-    await postComment(context, logger.ok(`${env.UBIQUITY_OS_APP_NAME} is thinking...`));
+    await addCommentToIssue(context, `${env.UBIQUITY_OS_APP_NAME} is thinking...`);
     const response = await askQuestion(context, question);
     const { answer, tokenUsage, groundTruths } = response;
     if (!answer) {
@@ -49,11 +50,35 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
     } else {
       await addCommentToIssue(context, answer + metadataString);
     }
-    // const res = logger.info(answer, { groundTruths, tokenUsage });
-    // res.metadata = { ...res.metadata, caller: "ubiquity-os-llm-response" };
-    // await postComment(context, res, { raw: true });
     return { status: 200, reason: logger.info("Comment posted successfully").logMessage.raw };
   } catch (error) {
     throw await bubbleUpErrorComment(context, error, false);
   }
+}
+
+function createStructuredMetadata(header: string | undefined, logReturn: LogReturn) {
+  let logMessage, metadata;
+  if (logReturn) {
+    logMessage = logReturn.logMessage;
+    metadata = logReturn.metadata;
+  }
+
+  const jsonPretty = sanitizeMetadata(metadata);
+  const stackLine = new Error().stack?.split("\n")[2] ?? "";
+  const caller = stackLine.match(/at (\S+)/)?.[1] ?? "";
+  const ubiquityMetadataHeader = `\n\n<!-- Ubiquity - ${header} - ${caller} - ${metadata?.revision}`;
+
+  let metadataSerialized: string;
+  const metadataSerializedVisible = ["```json", jsonPretty, "```"].join("\n");
+  const metadataSerializedHidden = [ubiquityMetadataHeader, jsonPretty, "-->"].join("\n");
+
+  if (logMessage?.type === "fatal") {
+    // if the log message is fatal, then we want to show the metadata
+    metadataSerialized = [metadataSerializedVisible, metadataSerializedHidden].join("\n");
+  } else {
+    // otherwise we want to hide it
+    metadataSerialized = metadataSerializedHidden;
+  }
+
+  return metadataSerialized;
 }

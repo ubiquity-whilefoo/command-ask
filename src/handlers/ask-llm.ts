@@ -83,6 +83,6 @@ export async function askQuestion(context: Context, question: string): Promise<C
     // Create completion with all components
     return await completions.createCompletion(question, model, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);
   } catch (error) {
-    throw await bubbleUpErrorComment(context, error, false);
+    throw bubbleUpErrorComment(context, error, false);
   }
 }

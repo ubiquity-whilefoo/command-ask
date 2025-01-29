@@ -1,3 +1,4 @@
+import { postComment } from "@ubiquity-os/plugin-sdk";
 import { Context } from "../types";
 import { addCommentToIssue } from "./add-comment";
 import { askQuestion } from "./ask-llm";
@@ -6,7 +7,7 @@ import { bubbleUpErrorComment, sanitizeMetadata } from "../helpers/errors";
 import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
 
 export async function issueCommentCreatedCallback(context: Context<"issue_comment.created">): Promise<CallbackResult> {
-  const { logger, command, payload } = context;
+  const { logger, command, payload, env } = context;
   let question = "";
 
   if (payload.comment.user?.type === "Bot") {
@@ -23,6 +24,7 @@ export async function issueCommentCreatedCallback(context: Context<"issue_commen
   }
 
   try {
+    await postComment(context, logger.ok(`${env.UBIQUITY_OS_APP_NAME} is thinking...`));
     const response = await askQuestion(context, question);
     const { answer, tokenUsage, groundTruths } = response;
     if (!answer) {

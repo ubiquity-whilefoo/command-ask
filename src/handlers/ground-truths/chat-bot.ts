@@ -1,5 +1,6 @@
 import { Context } from "../../types";
 import { logger } from "../../helpers/errors";
+import { RepoLanguages } from "../../types/github-types";
 
 export async function fetchRepoDependencies(context: Context) {
   const {
@@ -51,10 +52,10 @@ export async function fetchRepoLanguageStats(context: Context) {
     },
   } = context;
   try {
-    const { data: languages } = await octokit.rest.repos.listLanguages({
+    const { data: languages } = (await octokit.rest.repos.listLanguages({
       owner,
       repo,
-    });
+    })) as { data: RepoLanguages };
 
     const totalBytes = Object.values(languages).reduce((acc, bytes) => acc + bytes, 0);
 

@@ -1,3 +1,4 @@
+import { Context } from "@ubiquity-os/plugin-sdk";
 import { GROUND_TRUTHS_SYSTEM_MESSAGES } from "../handlers/ground-truths/prompts";
 
 export type ModelApplications = "code-review" | "chat-bot";
@@ -33,7 +34,7 @@ export type GroundTruthsSystemMessageTemplate = {
 };
 
 export type StreamlinedComment = {
-  id: number;
+  id: string;
   user?: string;
   body?: string;
   org: string;
@@ -43,17 +44,18 @@ export type StreamlinedComment = {
     html: string;
     text: string;
   };
-};
-
-export type StreamlinedComments = {
-  issueNumber: number;
-  repo: string;
-  org: string;
-  comments: StreamlinedComment[];
+  commentType?: "issue_comment" | "pull_request_review_comment";
+  referencedCode?: {
+    content: string;
+    startLine: number;
+    endLine: number;
+    path: string;
+  };
 };
 
 export type TokenLimits = {
   modelMaxTokenLimit: number;
+  context: Context;
   maxCompletionTokens: number;
   runningTokenCount: number;
   tokensRemaining: number;

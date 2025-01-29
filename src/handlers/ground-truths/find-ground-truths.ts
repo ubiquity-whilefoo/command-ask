@@ -37,7 +37,7 @@ async function findChatBotTruths(
     },
   } = context;
   const systemMsg = createGroundTruthSysMsg(systemMsgObj);
-  const truths = await completions.createGroundTruthCompletion<"chat-bot">(context, JSON.stringify(params), systemMsg, "o1-mini");
+  const truths = await completions.createGroundTruthCompletion<"chat-bot">(JSON.stringify(params), systemMsg, "o1-mini");
   return validateGroundTruths(truths);
 }
 
@@ -52,6 +52,6 @@ async function findCodeReviewTruths(
     },
   } = context;
   const systemMsg = createGroundTruthSysMsg(systemMsgObj);
-  const truths = await completions.createGroundTruthCompletion<"code-review">(context, params.taskSpecification, systemMsg, "gpt-4o");
+  const truths = await completions.createGroundTruthCompletion<"code-review">(params.taskSpecification, systemMsg, "gpt-4o");
   return validateGroundTruths(truths);
 }

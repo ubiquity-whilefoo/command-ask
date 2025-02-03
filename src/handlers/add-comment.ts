@@ -104,4 +104,4 @@ export async function addCommentToIssue(context: Context, message: string, optio
   }
 }
 
-addCommentToIssue.lastCommentId = undefined as number | undefined;
+addCommentToIssue.lastCommentId = null as number | null;

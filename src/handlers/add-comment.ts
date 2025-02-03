@@ -1,4 +1,4 @@
-import { Context } from "../types/context";
+import { Context } from "../types";
 
 interface CommentOptions {
   inReplyTo?: {
@@ -6,17 +6,13 @@ interface CommentOptions {
   };
 }
 
-type PostComment = {
-  (context: Context, message: string, options?: CommentOptions): Promise<void>;
-  lastCommentId?: number;
-};
 /**
  * Add a comment to an issue or pull request
  * @param context - The context object containing environment and configuration details
  * @param message - The message to add as a comment
  * @param options - Optional parameters for pull request review comments
  */
-export const addCommentToIssue: PostComment = async function (context: Context, message: string, options?: CommentOptions) {
+export async function addCommentToIssue(context: Context, message: string, options?: CommentOptions): Promise<void> {
   const { payload } = context;
   const owner = payload.repository.owner.login;
   const repo = payload.repository.name;
@@ -106,4 +102,6 @@ export const addCommentToIssue: PostComment = async function (context: Context, 
     });
     throw error;
   }
-};
+}
+
+addCommentToIssue.lastCommentId = undefined as number | undefined;

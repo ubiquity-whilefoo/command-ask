@@ -17,11 +17,11 @@ function validateGitHubKey(key: string): boolean {
 
   const [owner, repo, number] = parts;
 
-  if (!owner || owner === "issues" || !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/i.test(owner)) {
+  if (!owner || owner === "issues" || !/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/i.test(owner)) {
     return false;
   }
 
-  if (!repo || !/^[a-zA-Z0-9-_]+$/i.test(repo)) {
+  if (!repo || !/^[a-zA-Z0-9._-]+$/i.test(repo)) {
     return false;
   }
 

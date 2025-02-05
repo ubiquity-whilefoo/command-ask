@@ -1,10 +1,10 @@
-import { Context } from "../types";
 import { CompletionsType } from "../adapters/openai/helpers/completions";
+import { bubbleUpErrorComment, logger } from "../helpers/errors";
 import { formatChatHistory } from "../helpers/format-chat-history";
+import { fetchSimilarContent } from "../helpers/issue-fetching";
+import { Context } from "../types";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
-import { bubbleUpErrorComment, logger } from "../helpers/errors";
-import { fetchSimilarContent } from "../helpers/issue-fetching";
 
 export async function askQuestion(context: Context, question: string): Promise<CompletionsType> {
   if (!question) {

@@ -41,5 +41,5 @@ UBIQUITY_OS_APP_NAME="UbiquityOS"
 ## Testing
 
 ```sh
-yarn test
+bun run test
 ```

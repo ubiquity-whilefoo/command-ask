@@ -1,4 +1,4 @@
-import { Context } from "../types/context";
+import { Context } from "../types";
 
 interface CommentOptions {
   inReplyTo?: {
@@ -12,7 +12,7 @@ interface CommentOptions {
  * @param message - The message to add as a comment
  * @param options - Optional parameters for pull request review comments
  */
-export async function addCommentToIssue(context: Context, message: string, options?: CommentOptions) {
+export async function addCommentToIssue(context: Context, message: string, options?: CommentOptions): Promise<void> {
   const { payload } = context;
   const owner = payload.repository.owner.login;
   const repo = payload.repository.name;
@@ -36,13 +36,24 @@ export async function addCommentToIssue(context: Context, message: string, optio
 
       if (options.inReplyTo.commentId) {
         // Reply to an existing review comment
-        await context.octokit.rest.pulls.createReplyForReviewComment({
-          owner,
-          repo,
-          pull_number: pullNumber,
-          body: message,
-          comment_id: options.inReplyTo.commentId,
-        });
+        if (addCommentToIssue.lastCommentId) {
+          await context.octokit.rest.pulls.updateReviewComment({
+            owner,
+            repo,
+            pull_number: pullNumber,
+            body: message,
+            comment_id: addCommentToIssue.lastCommentId,
+          });
+        } else {
+          const { data } = await context.octokit.rest.pulls.createReplyForReviewComment({
+            owner,
+            repo,
+            pull_number: pullNumber,
+            body: message,
+            comment_id: options.inReplyTo.commentId,
+          });
+          addCommentToIssue.lastCommentId = data.id;
+        }
       }
     } else {
       // Regular issue comment
@@ -59,12 +70,23 @@ export async function addCommentToIssue(context: Context, message: string, optio
         throw new Error("Cannot determine issue/PR number");
       }
 
-      await context.octokit.rest.issues.createComment({
-        owner,
-        repo,
-        issue_number: issueNumber,
-        body: message,
-      });
+      if (addCommentToIssue.lastCommentId) {
+        await context.octokit.rest.issues.updateComment({
+          owner,
+          repo,
+          issue_number: issueNumber,
+          body: message,
+          comment_id: addCommentToIssue.lastCommentId,
+        });
+      } else {
+        const { data } = await context.octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: issueNumber,
+          body: message,
+        });
+        addCommentToIssue.lastCommentId = data.id;
+      }
     }
   } catch (e: unknown) {
     const error = e instanceof Error ? e : new Error(String(e));
@@ -81,3 +103,5 @@ export async function addCommentToIssue(context: Context, message: string, optio
     throw error;
   }
 }
+
+addCommentToIssue.lastCommentId = null as number | null;

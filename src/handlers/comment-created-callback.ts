@@ -1,12 +1,12 @@
+import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
+import { bubbleUpErrorComment, sanitizeMetadata } from "../helpers/errors";
 import { Context } from "../types";
+import { CallbackResult } from "../types/proxy";
 import { addCommentToIssue } from "./add-comment";
 import { askQuestion } from "./ask-llm";
-import { CallbackResult } from "../types/proxy";
-import { bubbleUpErrorComment, sanitizeMetadata } from "../helpers/errors";
-import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
 
 export async function processCommentCallback(context: Context<"issue_comment.created" | "pull_request_review_comment.created">): Promise<CallbackResult> {
-  const { logger, command, payload } = context;
+  const { logger, command, payload, env } = context;
   let question = "";
 
   if (payload.comment.user?.type === "Bot") {
@@ -22,6 +22,7 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
   }
 
   try {
+    await addCommentToIssue(context, `${env.UBIQUITY_OS_APP_NAME} is thinking...`);
     const response = await askQuestion(context, question);
     const { answer, tokenUsage, groundTruths } = response;
     if (!answer) {

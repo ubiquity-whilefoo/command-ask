@@ -126,6 +126,7 @@ To use the OpenRouter API for fetching chat history, set the `OPENROUTER_API_KEY
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
 VOYAGEAI_API_KEY=your_voyageai_api_key
+OPENROUTER_API_KEY=your_openrouter_key
 OPENROUTER_API_KEY=your_openrouter_api_key
 UBIQUITY_OS_APP_NAME="UbiquityOS"
 ```

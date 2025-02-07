@@ -26,8 +26,8 @@ Command Ask is built as a Cloudflare Worker that integrates with GitHub's webhoo
 
 ```
 ┌─────────────────┐         ┌──────────────┐
-│  GitHub Webhook │ ──────> │   Cloudflare │
-│    (Comments)   │         │    Worker    │
+│  GitHub Webhook │ ──────> │    Github    │
+│    (Comments)   │         │    Action    │
 └─────────────────┘         └──────┬───────┘
                                    │
                     ┌──────────────┴───────────────┐

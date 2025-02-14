@@ -23,16 +23,21 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
 
   try {
     // Determine if this is a pull request review comment by checking the event type
-    const isPullRequestReviewComment = "review_comment" in payload.comment;
+    const isPullRequestReviewComment = context.eventName === "pull_request_review_comment.created";
 
     // Add thinking message with proper comment type
-    const commentOptions = isPullRequestReviewComment ? { inReplyTo: { commentId: payload.comment.id } } : undefined;
+    const commentOptions = isPullRequestReviewComment
+      ? {
+          inReplyTo: {
+            commentId: isPullRequestReviewComment ? payload.comment.id : undefined,
+          },
+        }
+      : undefined;
 
     await addCommentToIssue(
       context,
       `> [!TIP]
-> ${env.UBIQUITY_OS_APP_NAME} is thinking...
-> \`⌛\``,
+> ${env.UBIQUITY_OS_APP_NAME} is thinking...`,
       commentOptions
     );
 

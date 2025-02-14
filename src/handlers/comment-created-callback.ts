@@ -1,6 +1,7 @@
 import { Context } from "../types";
 import { CallbackResult } from "../types/proxy";
 import { askQuestion } from "./ask-llm";
+import { handleDrivePermissions } from "../helpers/drive-link-handler";
 
 export async function processCommentCallback(context: Context<"issue_comment.created" | "pull_request_review_comment.created">): Promise<CallbackResult> {
   const { logger, command, payload } = context;
@@ -8,6 +9,21 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
 
   if (payload.comment.user?.type === "Bot") {
     throw logger.error("Comment is from a bot. Skipping.");
+  }
+
+  // Add comment information to the context
+  if (payload.comment && payload.comment.user) {
+    context.commentInfo = {
+      id: payload.comment.id,
+      body: payload.comment.body,
+      user: {
+        login: payload.comment.user.login,
+        id: payload.comment.user.id,
+        type: payload.comment.user.type || "User",
+      },
+    };
+  } else {
+    throw logger.error("Invalid comment payload");
   }
 
   if (command?.name === "ask") {
@@ -18,7 +34,7 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
     return { status: 200, reason: logger.info("No question found in comment. Skipping.").logMessage.raw };
   }
 
-  await context.commentHandler.postComment(context, context.logger.ok("Thinking..."), { updateComment: true });
+await context.commentHandler.postComment(context, context.logger.ok("> [!TIP]\n> Thinking..."), { updateComment: true });
 
   const response = await askQuestion(context, question);
   const { answer, tokenUsage, groundTruths } = response;

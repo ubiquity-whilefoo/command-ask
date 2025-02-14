@@ -37,8 +37,7 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
     await addCommentToIssue(
       context,
       `> [!TIP]
-> ${env.UBIQUITY_OS_APP_NAME} is thinking...
-> \`⌛\``,
+> ${env.UBIQUITY_OS_APP_NAME} is thinking...`,
       commentOptions
     );
 

@@ -34,7 +34,7 @@ describe("Log post message test", () => {
     expect(addCommentToIssue).toHaveBeenCalledWith(
       expect.anything(),
       `> [!TIP]
-> UbiquityOS is thinking...`,
+> Thinking...`,
       undefined
     );
   });

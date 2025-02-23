@@ -6,23 +6,9 @@ import { Context } from "../types";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
 
-export async function askQuestion(context: Context, question: string): Promise<CompletionsType> {
+export async function askQuestion(context: Context, question: string, driveContents?: Array<{ name: string; content: string }>): Promise<CompletionsType> {
   if (!question) {
     throw context.logger.error("No question provided");
-  }
-
-
-  // Handle Drive permissions and content
-  const { hasPermission, message, content } = await handleDrivePermissions(context, question);
-
-  if (!hasPermission && message) {
-    context.logger.info("Waiting for Drive permissions");
-    throw new Error(message);
-  }
-
-  // Append Drive contents to question if available
-  if (content) {
-    question = `${question}\n\n${content}`;
   }
 
   context.logger.info("Asking LLM question: " + question);
@@ -90,9 +76,10 @@ export async function askQuestion(context: Context, question: string): Promise<C
   availableTokens -= groundTruthsTokens;
   context.logger.debug(`Ground truths tokens: ${groundTruthsTokens}`);
 
-  // Get formatted chat history with remaining tokens and reranked content
-  const formattedChat = await formatChatHistory(context, maxDepth, rerankedIssues, rerankedComments, availableTokens);
-  context.logger.debug("Formatted chat history: " + formattedChat.join("\n"));
+    // Get formatted chat history with remaining tokens and reranked content
+    // Pass drive contents along with other parameters to build chat history
+    const formattedChat = await formatChatHistory(context, maxDepth, rerankedIssues, rerankedComments, availableTokens, driveContents);
+    context.logger.debug("Formatted chat history: " + formattedChat.join("\n"));
 
   // Create completion with all components
   return await completions.createCompletion(question, model, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);

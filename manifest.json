@@ -34,7 +34,7 @@
       },
       "maxRetryAttempts": {
         "default": 5,
-        "description": "The number of times to retry a AI request",
+        "description": "The number of times to retry AI prompts",
         "type": "number"
       },
       "similarityThreshold": {

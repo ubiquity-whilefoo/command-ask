@@ -71,6 +71,7 @@ const inputs = {
     model: "gpt-4o",
     similarityThreshold: 0.8,
     maxRetryAttempts: 5,
+    processDriveLinks: true,
   },
   settings: {
     openAiBaseUrl: "https://openrouter.ai/api/v1",

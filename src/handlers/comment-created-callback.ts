@@ -11,21 +11,6 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
     throw logger.error("Comment is from a bot. Skipping.");
   }
 
-  // Add comment information to the context
-  if (payload.comment && payload.comment.user) {
-    context.commentInfo = {
-      id: payload.comment.id,
-      body: payload.comment.body,
-      user: {
-        login: payload.comment.user.login,
-        id: payload.comment.user.id,
-        type: payload.comment.user.type || "User",
-      },
-    };
-  } else {
-    throw logger.error("Invalid comment payload");
-  }
-
   if (command?.name === "ask") {
     question = command.parameters.question;
   } else if (payload.comment.body.trim().startsWith("/ask")) {

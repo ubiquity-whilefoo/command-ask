@@ -18,5 +18,4 @@ export type CommentInfo = {
 
 export type Context<TEvents extends SupportedEvents = SupportedEvents> = PluginContext<PluginSettings, Env, Command, TEvents> & {
   adapters: ReturnType<typeof createAdapters>;
-  commentInfo?: CommentInfo;
 };

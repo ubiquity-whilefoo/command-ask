@@ -108,31 +108,21 @@ The system includes comprehensive Google Drive integration supporting:
 - File type detection and processing for:
   - Google Workspace files (Docs, Sheets, Presentations)
   - Microsoft Office files (Word, Excel, PowerPoint)
-  - PDFs and Images
+  - PDFs
   - OpenDocument formats (ODT, ODS, ODP)
-  
-- Advanced file handling capabilities:
-  - Extracts text content from documents
-  - Parses spreadsheet data into structured format
-  - Processes presentation slides with titles and content
-  - Handles images with base64 encoding
-  
-- Robust error handling and accessibility features:
-  - Automatic file permission management
-  - Service account authentication
-  - Detailed error reporting for inaccessible files
-  - Permission request URL generation
 
 ### Setting up Google Drive Integration
 
 To enable Google Drive integration, follow these steps:
 
 1. Create a Google Cloud Project:
+
    - Go to [Google Cloud Console](https://console.cloud.google.com)
    - Create a new project or select an existing one
    - Enable the Google Drive API for your project
 
 2. Create a Service Account:
+
    - In the Cloud Console, go to "IAM & Admin" > "Service Accounts"
    - Click "Create Service Account"
    - Fill in the service account details
@@ -140,6 +130,7 @@ To enable Google Drive integration, follow these steps:
    - Click "Done"
 
 3. Generate Service Account Key:
+
    - Find your service account in the list
    - Click on the three dots menu (⋮) > "Manage keys"
    - Click "Add Key" > "Create new key"
@@ -201,3 +192,4 @@ UBIQUITY_OS_APP_NAME="UbiquityOS"
 
 ```sh
 bun run test
+```

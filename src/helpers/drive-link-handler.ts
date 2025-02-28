@@ -44,12 +44,11 @@ export async function checkDriveLinks(context: Context, question: string): Promi
     processedUrls.add(url);
 
     try {
-      const result = await google.drive.parseDriveLink(url);
-
-      if (!result.isAccessible) {
+      const parsedLink = await google.drive.parseDriveLink(url);
+      if (!parsedLink.isAccessible) {
         driveLinks.push({
           url,
-          data: result,
+          data: parsedLink,
           requiresPermission: true,
         });
       } else {
@@ -60,7 +59,6 @@ export async function checkDriveLinks(context: Context, question: string): Promi
       }
     } catch (error) {
       context.logger.error(`Error processing Drive link ${url}: ${error}`);
-      // Skip invalid links
       continue;
     }
   }

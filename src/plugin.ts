@@ -20,12 +20,18 @@ export async function plugin(context: Context) {
   };
   const openaiClient = new OpenAI(openAiObject);
   if (config.processDriveLinks && config.processDriveLinks === true) {
+    const credentials = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+
+    if (!credentials || typeof credentials !== "object" || !credentials.client_email || !credentials.private_key) {
+      throw new Error("Invalid Google service account key format");
+    }
+
     const auth = new GoogleAuth({
-      credentials: JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY),
+      credentials,
       scopes: ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/cloud-platform"],
     });
     const drive = google.drive({ version: "v3", auth });
-    context.logger.debug("Google Drive API client initialized");
+    context.logger.info("Google Drive API client initialized");
     context.adapters = createAdapters(supabase, voyageClient, openaiClient, context, drive);
   } else {
     context.adapters = createAdapters(supabase, voyageClient, openaiClient, context);

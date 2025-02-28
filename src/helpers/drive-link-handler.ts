@@ -1,8 +1,8 @@
 import { Context } from "../types";
-import { bubbleUpErrorComment } from "./errors";
 import { addCommentToIssue } from "../handlers/add-comment";
 import { ParsedDriveLink } from "../types/google";
 import { GoogleDriveClient } from "../adapters/google/helpers/google-drive";
+import ms from "ms";
 
 const POLL_INTERVAL = 25000; // 25 seconds
 const MAX_POLL_TIME = 900000; // 15 minutes
@@ -17,60 +17,56 @@ interface DriveLink {
  * Check for Drive links and their accessibility
  */
 export async function checkDriveLinks(context: Context, question: string): Promise<DriveLink[]> {
-  try {
-    const { google } = context.adapters;
-    if (!google) {
-      context.logger.info("Skipping Drive link processing");
-      return [];
-    }
-
-    const driveUrlPattern = /https:\/\/(docs|drive|sheets|slides)\.google\.com\/[^\s"<>)}\]]+(?=[\s"<>)}\]]|$)/g;
-    const matches = [...question.matchAll(driveUrlPattern)];
-
-    if (matches.length === 0) {
-      context.logger.info("No Drive links found in regex search");
-      return [];
-    }
-
-    context.logger.info(`Found ${matches.length} potential Drive links: ${matches.map((m) => m[0]).join(", ")}`);
-
-    const processedUrls = new Set<string>();
-    const driveLinks: DriveLink[] = [];
-
-    for (const match of matches) {
-      const url = match[0];
-      if (processedUrls.has(url)) {
-        continue;
-      }
-      processedUrls.add(url);
-
-      try {
-        const result = await google.drive.parseDriveLink(url);
-
-        if (!result.isAccessible) {
-          driveLinks.push({
-            url,
-            data: result,
-            requiresPermission: true,
-          });
-        } else {
-          driveLinks.push({
-            url,
-            requiresPermission: false,
-          });
-        }
-      } catch (error) {
-        context.logger.error(`Error processing Drive link ${url}: ${error}`);
-        // Skip invalid links
-        continue;
-      }
-    }
-
-    context.logger.info(`Processed ${driveLinks.length} valid Drive links`);
-    return driveLinks;
-  } catch (error) {
-    throw bubbleUpErrorComment(context, error, false);
+  const { google } = context.adapters;
+  if (!google) {
+    context.logger.info("Skipping Drive link processing");
+    return [];
   }
+
+  const driveUrlPattern = /https:\/\/(docs|drive|sheets|slides)\.google\.com\/[^\s"<>)}\]]+(?=[\s"<>)}\]]|$)/g;
+  const matches = [...question.matchAll(driveUrlPattern)];
+
+  if (matches.length === 0) {
+    context.logger.info("No Drive links found in regex search");
+    return [];
+  }
+
+  context.logger.info(`Found ${matches.length} potential Drive links: ${matches.map((m) => m[0]).join(", ")}`);
+
+  const processedUrls = new Set<string>();
+  const driveLinks: DriveLink[] = [];
+
+  for (const match of matches) {
+    const url = match[0];
+    if (processedUrls.has(url)) {
+      continue;
+    }
+    processedUrls.add(url);
+
+    try {
+      const result = await google.drive.parseDriveLink(url);
+
+      if (!result.isAccessible) {
+        driveLinks.push({
+          url,
+          data: result,
+          requiresPermission: true,
+        });
+      } else {
+        driveLinks.push({
+          url,
+          requiresPermission: false,
+        });
+      }
+    } catch (error) {
+      context.logger.error(`Error processing Drive link ${url}: ${error}`);
+      // Skip invalid links
+      continue;
+    }
+  }
+
+  context.logger.info(`Processed ${driveLinks.length} valid Drive links`);
+  return driveLinks;
 }
 
 /**
@@ -120,7 +116,7 @@ export function formatAccessRequestMessage(context: Context, links: DriveLink[])
   const fileList = linksNeedingPermission.map((link) => `- ${link.url}`).join("\n");
   const serviceAccountEmail = JSON.parse(context.env.GOOGLE_SERVICE_ACCOUNT_KEY).client_email;
 
-  return `I need access to continue. Please share these files with ${serviceAccountEmail}:\n\n${fileList}\n\nI'll wait up to 15 minutes for access to be granted.`;
+  return `I need access to continue. Please share these files with ${serviceAccountEmail}:\n\n${fileList}\n\nI'll wait up to ${ms(MAX_POLL_TIME, { long: true })} for access to be granted.`;
 }
 
 /**
@@ -139,17 +135,17 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
   for (const link of links) {
     context.logger.info(`Fetching content for ${link.url}`);
     try {
-      const result = link.data || (await google.drive.parseDriveLink(link.url));
-      context.logger.info(`Parsed Drive link: ${JSON.stringify(result)}`);
+      const driveContent = link.data || (await google.drive.parseDriveLink(link.url));
+      context.logger.info(`Parsed Drive link: ${JSON.stringify(driveContent)}`);
 
-      if (result.isAccessible && result.content) {
-        context.logger.info(`Fetched content for "${result.metadata.name}" with type ${result.fileType}`);
+      if (driveContent.isAccessible && driveContent.content) {
+        context.logger.info(`Fetched content for "${driveContent.metadata.name}" with type ${driveContent.fileType}`);
         let content = "";
 
-        if (result.isStructured && typeof result.content === "object") {
-          if (result.content.pages) {
+        if (driveContent.isStructured && typeof driveContent.content === "object") {
+          if (driveContent.content.pages) {
             // Google Docs
-            content = result.content.pages
+            content = driveContent.content.pages
               .map((page) => {
                 let pageContent = `Page ${page.pageNumber}:\n${page.content || ""}`;
                 if (page.tables?.length) {
@@ -158,34 +154,34 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
                 return pageContent;
               })
               .join("\n\n");
-          } else if (result.content.sheets) {
+          } else if (driveContent.content.sheets) {
             // Google Sheets
-            content = result.content.sheets.map((sheet) => `Sheet "${sheet.name}":\n${sheet.data.map((row) => row.join("\t")).join("\n")}`).join("\n\n");
-          } else if (result.content.slides) {
+            content = driveContent.content.sheets.map((sheet) => `Sheet "${sheet.name}":\n${sheet.data.map((row) => row.join("\t")).join("\n")}`).join("\n\n");
+          } else if (driveContent.content.slides) {
             // Google Slides
-            content = result.content.slides
+            content = driveContent.content.slides
               .map((slide) => {
                 const titleText = slide.title ? ` - ${slide.title}` : "";
                 return `Slide ${slide.slideNumber}${titleText}:\n${slide.textContent || ""}`;
               })
               .join("\n\n");
           }
-        } else if (result.isBase64) {
-          if (result.fileType === "image") {
-            content = result.content as string;
+        } else if (driveContent.isBase64) {
+          if (driveContent.fileType === "image") {
+            content = driveContent.content as string;
           } else {
-            const contentStr = result.content as string;
+            const contentStr = driveContent.content as string;
             const FILE_SIZE_KB = Math.round((contentStr.length * 3) / 4 / 1024);
-            content = `File "${result.metadata.name}" (${result.fileType}, ${FILE_SIZE_KB}KB)`;
+            content = `File "${driveContent.metadata.name}" (${driveContent.fileType}, ${FILE_SIZE_KB}KB)`;
           }
-        } else if (typeof result.content === "string") {
-          content = result.content;
+        } else if (typeof driveContent.content === "string") {
+          content = driveContent.content;
         }
 
         const match = link.url.match(/\/d\/([^/]+)/);
         driveContents.push({
           name: match ? `document-${match[1]}` : link.url,
-          content: `Content of "${result.metadata.name}":\n${content}`,
+          content: `Content of "${driveContent.metadata.name}":\n${content}`,
         });
       }
     } catch (error) {

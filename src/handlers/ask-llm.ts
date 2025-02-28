@@ -1,5 +1,4 @@
 import { CompletionsType } from "../adapters/openai/helpers/completions";
-import { handleDrivePermissions } from "../helpers/drive-link-handler";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchSimilarContent } from "../helpers/issue-fetching";
 import { Context } from "../types";
@@ -13,7 +12,6 @@ export async function askQuestion(context: Context, question: string, driveConte
   }
 
   context.logger.info("Asking LLM question: " + question);
-
   const {
     env: { UBIQUITY_OS_APP_NAME },
     config: { model, similarityThreshold, maxDepth },

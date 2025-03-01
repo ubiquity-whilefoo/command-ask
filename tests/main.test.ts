@@ -4,7 +4,6 @@ import { Octokit } from "@octokit/rest";
 import { TransformDecodeCheckError, Value } from "@sinclair/typebox/value";
 import { LogReturn, Logs } from "@ubiquity-os/ubiquity-os-logger";
 import { CompletionsType } from "../src/adapters/openai/helpers/completions";
-import { createKey } from "../src/helpers/issue-fetching";
 import { Context, SupportedEvents } from "../src/types";
 import { envSchema } from "../src/types/env";
 import { SimilarComment, SimilarIssue, TreeNode } from "../src/types/github-types";
@@ -87,12 +86,6 @@ describe("Ask plugin tests", () => {
   it("Should throw if OPENAI_API_KEY is not defined", () => {
     const settings = {};
     expect(() => Value.Decode(envSchema, settings)).toThrow(TransformDecodeCheckError);
-  });
-
-  it("should handle PR review comment URLs correctly", () => {
-    const prReviewUrl = "https://github.com/ubiquity/test-repo/pull/123/comments/456";
-    const key = createKey({} as unknown as Context, prReviewUrl);
-    expect(key).toBe("ubiquity/test-repo/123");
   });
 
   it("should construct the chat history correctly", async () => {

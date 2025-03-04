@@ -1,9 +1,6 @@
-import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
-import { sanitizeMetadata } from "../helpers/errors";
 import { Context } from "../types";
 import { CallbackResult } from "../types/proxy";
 import { askQuestion } from "./ask-llm";
-import { handleDrivePermissions } from "../helpers/drive-link-handler";
 
 export async function processCommentCallback(context: Context<"issue_comment.created" | "pull_request_review_comment.created">): Promise<CallbackResult> {
   const { logger, command, payload } = context;
@@ -21,7 +18,7 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
     return { status: 200, reason: logger.info("No question found in comment. Skipping.").logMessage.raw };
   }
 
-await context.commentHandler.postComment(context, context.logger.ok("> [!TIP]\n> Thinking..."), { updateComment: true });
+  await context.commentHandler.postComment(context, context.logger.ok("> [!TIP]\n> Thinking..."), { updateComment: true });
 
   const response = await askQuestion(context, question);
   const { answer, tokenUsage, groundTruths } = response;

@@ -1,10 +1,9 @@
 import { db } from "./__mocks__/db";
 import { Context, SupportedEvents } from "../src/types";
 import { CompletionsType } from "../src/adapters/openai/helpers/completions";
-import { logger } from "../src/helpers/errors";
 import { Octokit } from "@octokit/rest";
 import { SimilarComment, SimilarIssue, TreeNode } from "../src/types/github-types";
-import { LogReturn } from "@ubiquity-os/ubiquity-os-logger";
+import { LogReturn, Logs } from "@ubiquity-os/ubiquity-os-logger";
 import { jest } from "@jest/globals";
 
 const TEST_QUESTION = "what is pi?";
@@ -49,7 +48,7 @@ export function createContext(body = TEST_QUESTION) {
     },
     owner: "ubiquity",
     repo: "test-repo",
-    logger: logger,
+    logger: new Logs("debug"),
     config: {
       maxDepth: 5,
     },

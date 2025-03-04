@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Update Manifest and Commit Changes
-        uses: ShivTestOrg/action-deploy-plugin@main
+        uses: ubiquity-os/action-deploy-plugin@main
 
         with:
           treatAsEsm: true

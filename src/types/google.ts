@@ -31,6 +31,11 @@ export interface DriveFileMetadata {
   accessMessage?: string;
 }
 
+export type DocumentFile = {
+  name: string;
+  content: string;
+  author: string;
+};
 export interface DocumentContent {
   pages?: Array<{
     pageNumber: number;

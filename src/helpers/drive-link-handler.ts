@@ -1,5 +1,5 @@
 import { Context } from "../types";
-import { ParsedDriveLink } from "../types/google";
+import { DocumentFile, ParsedDriveLink } from "../types/google";
 import { GoogleDriveClient } from "../adapters/google/helpers/google-drive";
 import ms from "ms";
 
@@ -119,14 +119,14 @@ export function formatAccessRequestMessage(context: Context, links: DriveLink[])
 /**
  * Get content from Drive files once access is granted
  */
-export async function getDriveContents(context: Context, links: DriveLink[]): Promise<{ driveContents: Array<{ name: string; content: string }> }> {
+export async function getDriveContents(context: Context, links: DriveLink[]): Promise<{ driveContents: DocumentFile[] }> {
   const { google } = context.adapters;
   if (!google) {
     context.logger.info("Google adapter not found.");
     return { driveContents: [] };
   }
 
-  const driveContents: Array<{ name: string; content: string }> = [];
+  const driveContents: DocumentFile[] = [];
   context.logger.info(`Fetching content for ${links.length} Drive files`);
 
   for (const link of links) {
@@ -164,6 +164,7 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
         driveContents.push({
           name: match ? `document-${match[1]}` : link.url,
           content: `Content of "${driveContent.metadata.name}":\n${content}`,
+          author: driveContent.metadata.owners?.[0]?.displayName || "Unknown",
         });
       }
     } catch (error) {
@@ -180,7 +181,7 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
 export async function handleDrivePermissions(
   context: Context,
   question: string
-): Promise<{ hasPermission: boolean; message?: string; driveContents?: Array<{ name: string; content: string }> } | undefined> {
+): Promise<{ hasPermission: boolean; message?: string; driveContents?: DocumentFile[] } | undefined> {
   context.logger.info("Checking for Drive links in the question");
 
   // Check if Drive link processing is enabled in settings

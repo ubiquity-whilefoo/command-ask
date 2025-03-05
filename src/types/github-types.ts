@@ -1,6 +1,7 @@
 import { RestEndpointMethodTypes } from "@octokit/rest";
 import { Context } from "./context";
 import { StreamlinedComment } from "./llm";
+import { DocumentFile } from "./google";
 
 export type RepoLanguages = RestEndpointMethodTypes["repos"]["listLanguages"]["response"]["data"];
 
@@ -88,11 +89,7 @@ export interface TreeNode {
   similarComments?: SimilarComment[];
   codeSnippets?: { body: string; path: string }[];
   readmeSection?: string;
-  driveContents?: Array<{
-    name: string;
-    author?: string;
-    content: string;
-  }>;
+  driveContents?: DocumentFile[];
 }
 
 export interface IssueSearchResult {

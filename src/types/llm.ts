@@ -60,5 +60,3 @@ export type TokenLimits = {
   runningTokenCount: number;
   tokensRemaining: number;
 };
-
-export type DriveContents = { name: string; content: string };

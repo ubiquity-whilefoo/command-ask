@@ -1,6 +1,7 @@
 import { Context } from "../types";
 import { SimilarComment, SimilarIssue, TreeNode } from "../types/github-types";
-import { DriveContents, TokenLimits } from "../types/llm";
+import { DocumentFile } from "../types/google";
+import { TokenLimits } from "../types/llm";
 import { splitKey } from "./issue";
 import { fetchIssueComments } from "./issue-fetching";
 import { createDefaultTokenLimits, updateTokenCount } from "./token-utils";
@@ -386,7 +387,8 @@ async function processNodeContent(
       output.push(driveHeader);
 
       for (const doc of node.driveContents) {
-        const docHeader = `${childPrefix}├── ${doc.name}:`;
+        const authorText = doc.author ? " (by " + doc.author + ")" : "";
+        const docHeader = `${childPrefix}├── ${doc.name}${authorText}:`;
         if (!updateTokenCount(docHeader, testTokenLimits)) break;
         output.push(docHeader);
 
@@ -524,7 +526,7 @@ export async function buildChatHistoryTree(
   maxDepth: number = 2,
   similarComments: SimilarComment[],
   similarIssues: SimilarIssue[],
-  driveContents?: DriveContents[]
+  driveContents?: DocumentFile[]
 ): Promise<{ tree: TreeNode | null; tokenLimits: TokenLimits }> {
   const specAndBodies: Record<string, string> = {};
   const tokenLimits = createDefaultTokenLimits(context);
@@ -555,10 +557,10 @@ export async function formatChatHistory(
   similarIssues: SimilarIssue[],
   similarComments: SimilarComment[],
   availableTokens?: number,
-  driveContents?: DriveContents[]
+  driveContents?: DocumentFile[]
 ): Promise<string[]> {
   const { logger } = context;
-  const { tree, tokenLimits } = await buildChatHistoryTree(context, maxDepth, similarComments, similarIssues);
+  const { tree, tokenLimits } = await buildChatHistoryTree(context, maxDepth, similarComments, similarIssues, driveContents);
 
   if (!tree) {
     return ["No main issue found."];

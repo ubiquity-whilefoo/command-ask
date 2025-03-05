@@ -2,11 +2,11 @@ import { CompletionsType } from "../adapters/openai/helpers/completions";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchSimilarContent } from "../helpers/issue-fetching";
 import { Context } from "../types";
-import { DriveContents } from "../types/llm";
+import { DocumentFile } from "../types/google";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
 
-export async function askQuestion(context: Context, question: string, driveContents?: DriveContents[]): Promise<CompletionsType> {
+export async function askQuestion(context: Context, question: string, driveContents?: DocumentFile[]): Promise<CompletionsType> {
   if (!question) {
     throw context.logger.error("No question provided");
   }
@@ -75,10 +75,10 @@ export async function askQuestion(context: Context, question: string, driveConte
   availableTokens -= groundTruthsTokens;
   context.logger.debug(`Ground truths tokens: ${groundTruthsTokens}`);
 
-    // Get formatted chat history with remaining tokens and reranked content
-    // Pass drive contents along with other parameters to build chat history
-    const formattedChat = await formatChatHistory(context, maxDepth, rerankedIssues, rerankedComments, availableTokens, driveContents);
-    context.logger.debug("Formatted chat history: " + formattedChat.join("\n"));
+  // Get formatted chat history with remaining tokens and reranked content
+  // Pass drive contents along with other parameters to build chat history
+  const formattedChat = await formatChatHistory(context, maxDepth, rerankedIssues, rerankedComments, availableTokens, driveContents);
+  context.logger.debug("Formatted chat history: " + formattedChat.join("\n"));
 
   // Create completion with all components
   return await completions.createCompletion(question, model, formattedChat, groundTruths, UBIQUITY_OS_APP_NAME);

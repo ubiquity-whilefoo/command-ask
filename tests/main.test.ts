@@ -3,7 +3,6 @@ import { server } from "./__mocks__/node";
 import usersGet from "./__mocks__/users-get.json";
 import { expect, describe, beforeAll, beforeEach, afterAll, afterEach, it, jest } from "@jest/globals";
 import { drop } from "@mswjs/data";
-import { Octokit } from "@octokit/rest";
 import { TransformDecodeCheckError, Value } from "@sinclair/typebox/value";
 import { envSchema } from "../src/types/env";
 import { createContext } from "./utils";

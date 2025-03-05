@@ -1,6 +1,5 @@
 import { jest } from "@jest/globals";
 import { createContext } from "./utils";
-import { Context } from "../src/types";
 
 describe("Log post message test", () => {
   it("Should post a waiting message on start", async () => {

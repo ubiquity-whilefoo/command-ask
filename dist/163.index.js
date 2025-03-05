@@ -1,6 +1,6 @@
-exports.id = 163;
-exports.ids = [163];
-exports.modules = {
+export const id = 163;
+export const ids = [163];
+export const modules = {
 
 /***/ 75163:
 /***/ (function(module) {
@@ -45167,4 +45167,3 @@ exports.MessageHandler = MessageHandler;
 /***/ })
 
 };
-;

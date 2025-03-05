@@ -31,43 +31,15 @@ export interface DriveFileMetadata {
   accessMessage?: string;
 }
 
-export interface ParsedOfficeContent {
-  sheets?: Array<{
-    name?: string;
-    data: string[][];
-  }>;
-  slides?: Array<{
-    title?: string;
-    content?: string;
-  }>;
-  content?: string;
-}
-
 export interface DocumentContent {
   pages?: Array<{
     pageNumber: number;
     content?: string;
-    tables?: Array<{
-      rowCount: number;
-      columnCount: number;
-      data: string[][];
-    }>;
-  }>;
-  sheets?: Array<{
-    name: string;
-    data: string[][];
-  }>;
-  slides?: Array<{
-    slideNumber: number;
-    title?: string;
-    textContent?: string;
-    binaryContent?: string;
   }>;
   image?: Array<{
     title?: string;
     content?: string;
   }>;
-  rawContent?: string;
 }
 
 export interface ParsedDriveLink {

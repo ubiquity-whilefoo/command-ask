@@ -21,16 +21,17 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
 
   await context.commentHandler.postComment(context, context.logger.ok("Thinking..."), { updateComment: true });
 
-  let driveConents;
+  let driveContents;
   if (config.processDriveLinks && config.processDriveLinks === true) {
     const result = await handleDrivePermissions(context, question);
-    if (result && result.hasPermission) {
+    if (result && !result.hasPermission) {
       return { status: 403, reason: logger.error(result.message || "Drive permission error").logMessage.raw };
     }
-    driveConents = result?.driveContents;
+    driveContents = result?.driveContents;
   }
+
   // Proceed with question, including drive contents if available
-  const response = await askQuestion(context, question, driveConents);
+  const response = await askQuestion(context, question, driveContents);
   const { answer, tokenUsage, groundTruths } = response;
   if (!answer) {
     throw logger.error(`No answer from OpenAI`);

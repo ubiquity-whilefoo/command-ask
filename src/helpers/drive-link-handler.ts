@@ -144,22 +144,7 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
             // Google Docs
             content = driveContent.content.pages
               .map((page) => {
-                let pageContent = `Page ${page.pageNumber}:\n${page.content || ""}`;
-                if (page.tables?.length) {
-                  pageContent += "\n\nTables:\n" + page.tables.map((table) => table.data.map((row) => row.join("\t")).join("\n")).join("\n\n");
-                }
-                return pageContent;
-              })
-              .join("\n\n");
-          } else if (driveContent.content.sheets) {
-            // Google Sheets
-            content = driveContent.content.sheets.map((sheet) => `Sheet "${sheet.name}":\n${sheet.data.map((row) => row.join("\t")).join("\n")}`).join("\n\n");
-          } else if (driveContent.content.slides) {
-            // Google Slides
-            content = driveContent.content.slides
-              .map((slide) => {
-                const titleText = slide.title ? ` - ${slide.title}` : "";
-                return `Slide ${slide.slideNumber}${titleText}:\n${slide.textContent || ""}`;
+                return `Page ${page.pageNumber}:\n${page.content || ""}`;
               })
               .join("\n\n");
           }

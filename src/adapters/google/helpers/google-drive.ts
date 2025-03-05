@@ -1,7 +1,7 @@
 import { drive_v3 } from "googleapis";
 import { Context } from "../../../types";
 import { parseOfficeAsync } from "officeparser";
-import { DocumentContent, DriveFileMetadata, DriveFileType, ParsedDriveLink, ParsedOfficeContent } from "../../../types/google";
+import { DocumentContent, DriveFileMetadata, DriveFileType, ParsedDriveLink } from "../../../types/google";
 import { SuperGoogle } from "./google";
 
 const GOOGLE_APPS = "google-apps";
@@ -123,7 +123,7 @@ export class GoogleDriveClient extends SuperGoogle {
     fileType: DriveFileType,
     mimeType: string,
     name: string
-  ): Promise<{ content: string; documentContent: DocumentContent } | undefined> {
+  ): Promise<{ documentContent: DocumentContent } | undefined> {
     try {
       const response = mimeType.includes(GOOGLE_APPS)
         ? await this.client.files.export(
@@ -143,7 +143,6 @@ export class GoogleDriveClient extends SuperGoogle {
       // Handle image files specially
       if (fileType === "image") {
         return {
-          content,
           documentContent: {
             image: [
               {
@@ -156,55 +155,15 @@ export class GoogleDriveClient extends SuperGoogle {
       }
 
       try {
-        const parsedContent = (await parseOfficeAsync(buffer)) as ParsedOfficeContent;
-
-        // Handle string content (plain text)
-        if (typeof parsedContent === "string") {
-          return {
-            content,
-            documentContent: {
-              pages: [{ pageNumber: 1, content: parsedContent }],
-              rawContent: content,
-            },
-          };
-        }
-
-        // Handle sheets
-        if (parsedContent.sheets) {
-          return {
-            content,
-            documentContent: {
-              sheets: parsedContent.sheets.map((sheet, index) => ({
-                name: sheet.name || `Sheet ${index + 1}`,
-                data: sheet.data.map((row) => row.map((cell) => String(cell))),
-              })),
-              rawContent: content,
-            },
-          };
-        }
-
-        // Handle slides
-        if (parsedContent.slides) {
-          return {
-            content,
-            documentContent: {
-              slides: parsedContent.slides.map((slide, index) => ({
-                slideNumber: index + 1,
-                title: slide.title || "",
-                textContent: slide.content || "",
-                images: [],
-              })),
-              rawContent: content,
-            },
-          };
-        }
-
-        // Fallback for unexpected formats
-        throw new Error("Unexpected file format");
+        const parsedContent = (await parseOfficeAsync(buffer)) as string;
+        return {
+          documentContent: {
+            pages: [{ pageNumber: 1, content: parsedContent }],
+          },
+        };
       } catch (error) {
         this.context.logger.error(`Error parsing ${fileType} file: ${error}`);
         return {
-          content,
           documentContent: {
             pages: [
               {
@@ -212,7 +171,6 @@ export class GoogleDriveClient extends SuperGoogle {
                 content: `Unable to extract readable content from ${fileType.toUpperCase()} file. Size: ${buffer.length} bytes.`,
               },
             ],
-            rawContent: content,
           },
         };
       }

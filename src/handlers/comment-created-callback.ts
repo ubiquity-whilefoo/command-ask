@@ -5,7 +5,7 @@ import { handleDrivePermissions } from "../helpers/drive-link-handler";
 
 export async function processCommentCallback(context: Context<"issue_comment.created" | "pull_request_review_comment.created">): Promise<CallbackResult> {
   const { logger, command, payload, config } = context;
-  let question = "";
+  let question;
 
   if (payload.comment.user?.type === "Bot") {
     throw logger.error("Comment is from a bot. Skipping.");
@@ -22,7 +22,7 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
   await context.commentHandler.postComment(context, context.logger.ok("Thinking..."), { updateComment: true });
 
   let driveContents;
-  if (config.processDriveLinks && config.processDriveLinks === true) {
+  if (config.processDriveLinks) {
     const result = await handleDrivePermissions(context, question);
     if (result && !result.hasPermission) {
       return { status: 403, reason: logger.error(result.message || "Drive permission error").logMessage.raw };

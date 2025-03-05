@@ -118,12 +118,7 @@ export class GoogleDriveClient extends SuperGoogle {
   /**
    * Handle file content by getting OpenXML format where possible
    */
-  private async _handleFileContent(
-    fileId: string,
-    fileType: DriveFileType,
-    mimeType: string,
-    name: string
-  ): Promise<{ documentContent: DocumentContent } | undefined> {
+  private async _handleFileContent(fileId: string, fileType: DriveFileType, mimeType: string, name: string): Promise<{ documentContent: DocumentContent }> {
     try {
       const response = mimeType.includes(GOOGLE_APPS)
         ? await this.client.files.export(
@@ -135,7 +130,7 @@ export class GoogleDriveClient extends SuperGoogle {
           )
         : await this.client.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
 
-      if (!response?.data) return undefined;
+      if (!response?.data) throw new Error("Invalid file content");
 
       const buffer = Buffer.from(response.data as ArrayBuffer);
       const content = buffer.toString("base64");
@@ -176,7 +171,7 @@ export class GoogleDriveClient extends SuperGoogle {
       }
     } catch (error) {
       this.context.logger.error(`Failed to fetch file content: ${error}`);
-      return undefined;
+      throw error;
     }
   }
 

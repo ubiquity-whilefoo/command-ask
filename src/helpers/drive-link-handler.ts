@@ -80,8 +80,8 @@ export async function checkAccessStatus(drive: GoogleDriveClient, links: DriveLi
   const updated: DriveLink[] = [];
   for (const link of linksNeedingPermission) {
     try {
-      const result = await drive.parseDriveLink(link.url);
-      if (!result.isAccessible || !result.content) {
+      const driveLinkInfo = await drive.parseDriveLink(link.url);
+      if (!driveLinkInfo.isAccessible || !driveLinkInfo.content) {
         hasFullAccess = false;
         break;
       }
@@ -89,7 +89,7 @@ export async function checkAccessStatus(drive: GoogleDriveClient, links: DriveLi
       updated.push({
         ...link,
         requiresPermission: false,
-        data: result,
+        data: driveLinkInfo,
       });
     } catch {
       hasFullAccess = false;
@@ -103,11 +103,11 @@ export async function checkAccessStatus(drive: GoogleDriveClient, links: DriveLi
 /**
  * Format access request message
  */
-export function formatAccessRequestMessage(context: Context, links: DriveLink[]): string {
+export function formatAccessRequestMessage(context: Context, links: DriveLink[]): string | undefined {
   const linksNeedingPermission = links.filter((link) => link.requiresPermission);
 
   if (linksNeedingPermission.length === 0) {
-    return "";
+    return;
   }
 
   const fileList = linksNeedingPermission.map((link) => `- ${link.url}`).join("\n");
@@ -137,7 +137,7 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
 
       if (driveContent.isAccessible && driveContent.content) {
         context.logger.info(`Fetched content for "${driveContent.metadata.name}" with type ${driveContent.fileType}`);
-        let content = "";
+        let content;
 
         if (driveContent.isStructured && typeof driveContent.content === "object") {
           if (driveContent.content.pages) {
@@ -206,7 +206,7 @@ export async function handleDrivePermissions(
   }
 
   // If any links need permission, start polling flow
-  const accessMessage = formatAccessRequestMessage(context, driveLinks); // Pass context here
+  const accessMessage = formatAccessRequestMessage(context, driveLinks);
   context.logger.info(`Access message: ${accessMessage}`);
 
   if (accessMessage) {

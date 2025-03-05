@@ -19,11 +19,11 @@ export async function plugin(context: Context) {
     ...(config.openAiBaseUrl && { baseURL: config.openAiBaseUrl }),
   };
   const openaiClient = new OpenAI(openAiObject);
-  if (config.processDriveLinks && config.processDriveLinks === true) {
+  if (config.processDriveLinks) {
     const credentials = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
 
     if (!credentials || typeof credentials !== "object" || !credentials.client_email || !credentials.private_key) {
-      throw new Error("Invalid Google service account key format");
+      throw context.logger.error("Invalid Google Service Account key. Exiting.");
     }
 
     const auth = new GoogleAuth({

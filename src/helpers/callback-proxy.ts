@@ -19,18 +19,5 @@ export async function callCallbacks<T extends SupportedEvents>(context: Context<
     context.logger.info(`No callbacks found for event ${eventName}`);
     return { status: 204, reason: "skipped" };
   }
-
-  try {
-    return (await Promise.all(callbacks[eventName].map((callback) => callback(context))))[0];
-  } catch (er) {
-    await context.commentHandler.postComment(
-      context,
-      context.logger.error("Error processing callback", { stack: er instanceof Error ? er.message : String(er) }),
-      {
-        updateComment: true,
-        raw: true,
-      }
-    );
-    return { status: 500, reason: er instanceof Error ? er.message : String(er) };
-  }
+  return (await Promise.all(callbacks[eventName].map((callback) => callback(context))))[0];
 }

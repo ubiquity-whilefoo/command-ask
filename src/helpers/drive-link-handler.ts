@@ -139,14 +139,12 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
       }
       context.logger.info(`Fetched content for "${driveContent.metadata.name}" with type ${driveContent.fileType}`);
       let content;
-      if (driveContent.isStructured && typeof driveContent.content === "object") {
-        if (driveContent.content.pages) {
-          content = driveContent.content.pages
-            .map((page) => {
-              return `Page ${page.pageNumber}:\n${page.content || ""}`;
-            })
-            .join("\n\n");
-        }
+      if (driveContent.isStructured && typeof driveContent.content === "object" && driveContent.content.pages) {
+        content = driveContent.content.pages
+          .map((page) => {
+            return `Page ${page.pageNumber}:\n${page.content || ""}`;
+          })
+          .join("\n\n");
       } else if (driveContent.isBase64) {
         if (driveContent.fileType === "image") {
           content = driveContent.content as string;

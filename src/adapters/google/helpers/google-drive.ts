@@ -119,59 +119,54 @@ export class GoogleDriveClient extends SuperGoogle {
    * Handle file content by getting OpenXML format where possible
    */
   private async _handleFileContent(fileId: string, fileType: DriveFileType, mimeType: string, name: string): Promise<{ documentContent: DocumentContent }> {
-    try {
-      const response = mimeType.includes(GOOGLE_APPS)
-        ? await this.client.files.export(
+    const response = mimeType.includes(GOOGLE_APPS)
+      ? await this.client.files.export(
+          {
+            fileId,
+            mimeType: this._getExportMimeType(fileType),
+          },
+          { responseType: "arraybuffer" }
+        )
+      : await this.client.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
+
+    if (!response?.data) throw new Error("Invalid file content");
+
+    const buffer = Buffer.from(response.data as ArrayBuffer);
+    const content = buffer.toString("base64");
+
+    // Handle image files specially
+    if (fileType === "image") {
+      return {
+        documentContent: {
+          image: [
             {
-              fileId,
-              mimeType: this._getExportMimeType(fileType),
+              content,
+              title: name,
             },
-            { responseType: "arraybuffer" }
-          )
-        : await this.client.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
+          ],
+        },
+      };
+    }
 
-      if (!response?.data) throw new Error("Invalid file content");
-
-      const buffer = Buffer.from(response.data as ArrayBuffer);
-      const content = buffer.toString("base64");
-
-      // Handle image files specially
-      if (fileType === "image") {
-        return {
-          documentContent: {
-            image: [
-              {
-                content,
-                title: name,
-              },
-            ],
-          },
-        };
-      }
-
-      try {
-        const parsedContent = (await parseOfficeAsync(buffer)) as string;
-        return {
-          documentContent: {
-            pages: [{ pageNumber: 1, content: parsedContent }],
-          },
-        };
-      } catch (error) {
-        this.context.logger.error(`Error parsing ${fileType} file: ${error}`);
-        return {
-          documentContent: {
-            pages: [
-              {
-                pageNumber: 1,
-                content: `Unable to extract readable content from ${fileType.toUpperCase()} file. Size: ${buffer.length} bytes.`,
-              },
-            ],
-          },
-        };
-      }
+    try {
+      const parsedContent = (await parseOfficeAsync(buffer)) as string;
+      return {
+        documentContent: {
+          pages: [{ pageNumber: 1, content: parsedContent }],
+        },
+      };
     } catch (error) {
-      this.context.logger.error(`Failed to fetch file content: ${error}`);
-      throw error;
+      this.context.logger.error(`Error parsing ${fileType} file: ${error}`);
+      return {
+        documentContent: {
+          pages: [
+            {
+              pageNumber: 1,
+              content: `Unable to extract readable content from ${fileType.toUpperCase()} file. Size: ${buffer.length} bytes.`,
+            },
+          ],
+        },
+      };
     }
   }
 

@@ -134,39 +134,37 @@ export async function getDriveContents(context: Context, links: DriveLink[]): Pr
     try {
       const driveContent = link.data || (await google.drive.parseDriveLink(link.url));
       context.logger.info(`Parsed Drive link: ${JSON.stringify(driveContent)}`);
-
-      if (driveContent.isAccessible && driveContent.content) {
-        context.logger.info(`Fetched content for "${driveContent.metadata.name}" with type ${driveContent.fileType}`);
-        let content;
-
-        if (driveContent.isStructured && typeof driveContent.content === "object") {
-          if (driveContent.content.pages) {
-            // Google Docs
-            content = driveContent.content.pages
-              .map((page) => {
-                return `Page ${page.pageNumber}:\n${page.content || ""}`;
-              })
-              .join("\n\n");
-          }
-        } else if (driveContent.isBase64) {
-          if (driveContent.fileType === "image") {
-            content = driveContent.content as string;
-          } else {
-            const contentStr = driveContent.content as string;
-            const FILE_SIZE_KB = Math.round((contentStr.length * 3) / 4 / 1024);
-            content = `File "${driveContent.metadata.name}" (${driveContent.fileType}, ${FILE_SIZE_KB}KB)`;
-          }
-        } else if (typeof driveContent.content === "string") {
-          content = driveContent.content;
-        }
-
-        const match = link.url.match(/\/d\/([^/]+)/);
-        driveContents.push({
-          name: match ? `document-${match[1]}` : link.url,
-          content: `Content of "${driveContent.metadata.name}":\n${content}`,
-          author: driveContent.metadata.owners?.[0]?.displayName || "Unknown",
-        });
+      if (!driveContent.isAccessible || !driveContent.content) {
+        continue;
       }
+      context.logger.info(`Fetched content for "${driveContent.metadata.name}" with type ${driveContent.fileType}`);
+      let content;
+      if (driveContent.isStructured && typeof driveContent.content === "object") {
+        if (driveContent.content.pages) {
+          content = driveContent.content.pages
+            .map((page) => {
+              return `Page ${page.pageNumber}:\n${page.content || ""}`;
+            })
+            .join("\n\n");
+        }
+      } else if (driveContent.isBase64) {
+        if (driveContent.fileType === "image") {
+          content = driveContent.content as string;
+        } else {
+          const contentStr = driveContent.content as string;
+          const FILE_SIZE_KB = Math.round((contentStr.length * 3) / 4 / 1024);
+          content = `File "${driveContent.metadata.name}" (${driveContent.fileType}, ${FILE_SIZE_KB}KB)`;
+        }
+      } else if (typeof driveContent.content === "string") {
+        content = driveContent.content;
+      }
+
+      const match = link.url.match(/\/d\/([^/]+)/);
+      driveContents.push({
+        name: match ? `document-${match[1]}` : link.url,
+        content: `Content of "${driveContent.metadata.name}":\n${content}`,
+        author: driveContent.metadata.owners?.[0]?.displayName || "Unknown",
+      });
     } catch (error) {
       context.logger.error(`Failed to fetch content for ${link.url}: ${error}`);
       continue;

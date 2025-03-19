@@ -58,7 +58,6 @@ export async function checkDriveLinks(context: Context, question: string): Promi
       }
     } catch (error) {
       context.logger.error(`Error processing Drive link ${url}: ${error}`);
-      continue;
     }
   }
 

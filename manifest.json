@@ -19,6 +19,7 @@
     }
   },
   "configuration": {
+    "default": {},
     "type": "object",
     "properties": {
       "model": {

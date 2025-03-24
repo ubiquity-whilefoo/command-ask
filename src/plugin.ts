@@ -5,6 +5,8 @@ import { VoyageAIClient } from "voyageai";
 import OpenAI from "openai";
 import { callCallbacks } from "./helpers/callback-proxy";
 import { processCommentCallback } from "./handlers/comment-created-callback";
+import { GoogleAuth } from "google-auth-library";
+import { google } from "googleapis";
 
 export async function plugin(context: Context) {
   const { env, config } = context;
@@ -17,7 +19,23 @@ export async function plugin(context: Context) {
     ...(config.openAiBaseUrl && { baseURL: config.openAiBaseUrl }),
   };
   const openaiClient = new OpenAI(openAiObject);
-  context.adapters = createAdapters(supabase, voyageClient, openaiClient, context);
+  if (config.processDriveLinks) {
+    const credentials = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+
+    if (!credentials || typeof credentials !== "object" || !credentials.client_email || !credentials.private_key) {
+      throw context.logger.error("Invalid Google Service Account key. Exiting.");
+    }
+
+    const auth = new GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/cloud-platform"],
+    });
+    const drive = google.drive({ version: "v3", auth });
+    context.logger.info("Google Drive API client initialized");
+    context.adapters = createAdapters(supabase, voyageClient, openaiClient, context, drive);
+  } else {
+    context.adapters = createAdapters(supabase, voyageClient, openaiClient, context);
+  }
 
   if (context.command) {
     return await processCommentCallback(context);

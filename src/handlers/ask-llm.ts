@@ -2,16 +2,16 @@ import { CompletionsType } from "../adapters/openai/helpers/completions";
 import { formatChatHistory } from "../helpers/format-chat-history";
 import { fetchSimilarContent } from "../helpers/issue-fetching";
 import { Context } from "../types";
+import { DocumentFile } from "../types/google";
 import { fetchRepoDependencies, fetchRepoLanguageStats } from "./ground-truths/chat-bot";
 import { findGroundTruths } from "./ground-truths/find-ground-truths";
 
-export async function askQuestion(context: Context, question: string): Promise<CompletionsType> {
+export async function askQuestion(context: Context, question: string, driveContents?: DocumentFile[]): Promise<CompletionsType> {
   if (!question) {
     throw context.logger.error("No question provided");
   }
 
   context.logger.info("Asking LLM question: " + question);
-
   const {
     env: { UBIQUITY_OS_APP_NAME },
     config: { model, similarityThreshold, maxDepth },
@@ -76,7 +76,8 @@ export async function askQuestion(context: Context, question: string): Promise<C
   context.logger.debug(`Ground truths tokens: ${groundTruthsTokens}`);
 
   // Get formatted chat history with remaining tokens and reranked content
-  const formattedChat = await formatChatHistory(context, maxDepth, rerankedIssues, rerankedComments, availableTokens);
+  // Pass drive contents along with other parameters to build chat history
+  const formattedChat = await formatChatHistory(context, maxDepth, rerankedIssues, rerankedComments, availableTokens, driveContents);
   context.logger.debug("Formatted chat history: " + formattedChat.join("\n"));
 
   // Create completion with all components

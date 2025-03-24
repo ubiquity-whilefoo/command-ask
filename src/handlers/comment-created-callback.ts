@@ -1,10 +1,11 @@
 import { Context } from "../types";
 import { CallbackResult } from "../types/proxy";
 import { askQuestion } from "./ask-llm";
+import { handleDrivePermissions } from "../helpers/drive-link-handler";
 
 export async function processCommentCallback(context: Context<"issue_comment.created" | "pull_request_review_comment.created">): Promise<CallbackResult> {
-  const { logger, command, payload } = context;
-  let question = "";
+  const { logger, command, payload, config } = context;
+  let question;
 
   if (payload.comment.user?.type === "Bot") {
     throw logger.error("Comment is from a bot. Skipping.");
@@ -20,7 +21,17 @@ export async function processCommentCallback(context: Context<"issue_comment.cre
 
   await context.commentHandler.postComment(context, context.logger.ok("Thinking..."), { updateComment: true });
 
-  const response = await askQuestion(context, question);
+  let driveContents;
+  if (config.processDriveLinks) {
+    const result = await handleDrivePermissions(context, question);
+    if (result && !result.hasPermission) {
+      return { status: 403, reason: logger.error(result.message || "Drive permission error").logMessage.raw };
+    }
+    driveContents = result?.driveContents;
+  }
+
+  // Proceed with question, including drive contents if available
+  const response = await askQuestion(context, question, driveContents);
   const { answer, tokenUsage, groundTruths } = response;
   if (!answer) {
     throw logger.error(`No answer from OpenAI`);

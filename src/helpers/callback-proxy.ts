@@ -19,6 +19,5 @@ export async function callCallbacks<T extends SupportedEvents>(context: Context<
     context.logger.info(`No callbacks found for event ${eventName}`);
     return { status: 204, reason: "skipped" };
   }
-
   return (await Promise.all(callbacks[eventName].map((callback) => callback(context))))[0];
 }

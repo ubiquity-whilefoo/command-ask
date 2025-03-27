@@ -21,14 +21,9 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Install toolchain
-        run: bun install --frozen-lockfile
-
-      - name: Eslint
-        run: bun run eslint --fix-dry-run
-
-      - name: Cspell
-        run: bun run format:cspell
-
-      - name: Prettier
-        run: bun run prettier --check .
+      - name: Run formatting checks
+        run: |
+          bun install --frozen-lockfile
+          bun run eslint --fix-dry-run --ignore-pattern dist/
+          bun run format:cspell
+          bun run prettier --check .

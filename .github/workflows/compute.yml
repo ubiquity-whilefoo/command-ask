@@ -26,24 +26,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions: write-all
     environment: ${{ github.ref == 'refs/heads/main' && 'main' || 'development' }}
+    env:
+      PLUGIN_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      KERNEL_PUBLIC_KEY: ${{ secrets.KERNEL_PUBLIC_KEY }}
+      LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'info' }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      VOYAGEAI_API_KEY: ${{ secrets.VOYAGEAI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      UBIQUITY_OS_APP_NAME: ${{ secrets.UBIQUITY_OS_APP_NAME }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: setup node
-        uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: "20.10.0"
+          bun-version: latest
 
       - name: execute directive
-        run: node ./dist/index.js
+        run: bun ./dist/index.js
         id: command-ask
-        env:
-          KERNEL_PUBLIC_KEY: ${{ secrets.KERNEL_PUBLIC_KEY }}
-          PLUGIN_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          VOYAGEAI_API_KEY: ${{ secrets.VOYAGEAI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          UBIQUITY_OS_APP_NAME: ${{ secrets.UBIQUITY_OS_APP_NAME }}

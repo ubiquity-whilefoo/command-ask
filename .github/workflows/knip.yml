@@ -20,7 +20,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: Install toolchain
-        run: bun install --frozen-lockfile
+        run: bun install
 
       - name: Store PR number
         run: echo ${{ github.event.number }} > pr-number.txt
